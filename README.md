@@ -5,6 +5,8 @@
 
 ## CODE
 
+Using DESeq2 normalization
+
 ### Packages
 
       library(kohonen);	# This is the library for the SOM (Self-Organizing maps)
@@ -89,11 +91,20 @@
       # counts: your data frame with columns T1..T8, H9..H16
       
       # Drop genes with zero counts across all samples
+      # Removes genes that are "completely absent" across "all samples"
       counts <- counts[rowSums(counts) > 0, , drop = FALSE]
       cat("After zero-row filter:", nrow(counts), "genes and", ncol(counts), "samples\n")
             # cat() → prints a quick summary
 
 ### Grouping into T0 & H24
+
+When we want to se how RAW DATA behavior alone, say plot of the CPM/FPM of each gene in T1 to H16, grouping by condition T0 or H24 is not introducing BIAS, it is just labeling:
+      
+→ We aren't filtering based on the difference
+
+→ We are "organizing" the samples
+
+   → It become BIAS when we decide based on these groups which genes to keep
 
       ## Build colData for grouping (T0 vs H24) 
       samples <- colnames(counts)
@@ -105,38 +116,81 @@
       coldata <- data.frame(time = time, row.names = samples)
             # data.frame() → Build up the metadata "table"
 
-### 
+### FPM screen
 
-      ## ========= STEP 2: FPM screen (>1 in ≥ half of reps per group) =========
+In DESeq2 package, FPM = Fragments Per Million 
+
+|                  CPM = Counts Per Million in edgeR & limma
+
+<img width="300" height="150" alt="image" src="https://github.com/user-attachments/assets/ca0c1cfd-87b4-4ed5-a3f2-e6ae7d382c02" />
+
+      ##  FPM >1 in ≥ half of reps per group
+      # HALF → We may have genes that are “off” in T0 but “on” in H24 (or vice versa)
+
+      ## 1) Create DESeq 
       # DESeq2 needs integer counts; round if your file has decimals
       dds_raw <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts)),
-                                        colData = coldata,
-                                        design = ~ time)
+                                        colData = coldata,      # Provides metadata
+                                        design = ~ time)        # Tells experimental design
+
       
+      ## 2) Compute raw FPM/CPM
       # Raw FPM/CPM-like (before size-factor normalization) for *presence* filtering
       cpm_raw <- fpm(dds_raw, robust = FALSE)   # keep FALSE to match our pipeline
-      
-      # Keep a gene if FPM>1 in at least half of the replicates in ANY group (T0 or H24)
+            # Here, it’s before normalization, quick way to check presence (expression >1)
+
+            
+      ## 3) Keep a gene if FPM>1 in at least half of the replicates in ANY group (T0 or H24)
       grp <- coldata$time
-      mat_eval <- cpm_raw > 1
-      keep <- rep(FALSE, nrow(mat_eval))
-      cutoff <- ceiling(table(grp) / 2)  # half of replicates per group
-      
+      mat_eval <- cpm_raw > 1                  # TRUE if FPM > 1, else FALSE.
+      keep <- rep(FALSE, nrow(mat_eval))       
+      cutoff <- ceiling(table(grp) / 2)        # half of replicates per group 
+
+
+      ## 4) Group wise filtering loop 
       for (g in levels(grp)) {
         idx <- which(grp == g)
-        keep <- keep | (rowSums(mat_eval[, idx, drop = FALSE]) >= cutoff[g])
+        keep <- keep | (rowSums(mat_eval[, idx, drop = FALSE]) >= cutoff[g])      keep = TRUE if the gene passed the rule in at least one group
       }
-      
-      cat("Genes kept by FPM>1 prevalence rule:", sum(keep), "of", length(keep),
-          sprintf("(%.1f%%)\n", 100 * sum(keep) / length(keep)))
-      
-      # Subset your objects for downstream steps
+            # DO NOT introduce BIAS → since he OR (|) combines them: if a gene is expressed in ≥ half of T0 samples OR ≥ half of H24 samples, it’s kept.
+            # Also the rule is symmetric in T0 & T24
+            # NOT → keep genes that are higher in H24 than T0 = BIASED
+            # YES → keep genes that are expressed in a reasonably consistent way in "at least one group"
+
+
+      ## 5) Prints how many genes survived and the % of total.
+      cat("Genes kept by FPM > 1 prevalence rule:", sum(keep), "out of", length(keep),
+          sprintf("meaining a %.1f%%\n kept", 100 * sum(keep) / length(keep)))
+
+
+      ## 6) Subset your objects for downstream steps
       counts_filt <- counts[keep, , drop = FALSE]
       dds_1 <- dds_raw[keep, ]  # we’ll use this for size-factor normalization next
-      
-        # Quick sanity check
-        stopifnot(identical(colnames(counts_filt), rownames(coldata)))
+            # Keeps only the filtered genes in both raw counts and DESeq2 object.
 
+                  
+      ## 7) Quick sanity check
+      stopifnot(identical(colnames(counts_filt), rownames(coldata)))
+            #Ensures sample names still match perfectly between counts_filt and coldata
+
+## DESeq2 normalization
+
+Size factor nomalization
+
+→ Corrects for differences in sequencing depth / library size between samples
+
+E.g. one sample may have 15M reads, another 25M → without correction, all counts in the 25M sample would look “higher” just due to depth 
+
+      dds_1 <- estimateSizeFactors(dds_1)      # median-of-ratios
+      sizeFactors(dds_1)[1:5]                  # quick peek(vistazo)
+
+<img width="309" height="30" alt="image" src="https://github.com/user-attachments/assets/b0426a2a-1de0-47e0-b9bc-40bd172d43a4" />
+
+So:
+
+→ T3 had the largest depth (1.21)
+
+→ T5 is almost average (1.00)
 
 
 
