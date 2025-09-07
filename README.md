@@ -84,6 +84,64 @@
       if (length(missing)) stop("Missing: ", paste(missing, collapse=", "))
       if (length(extra))   stop("Extra: ",   paste(extra, collapse=", "))
 
+### Zero-count filter
+
+      # counts: your data frame with columns T1..T8, H9..H16
+      
+      # Drop genes with zero counts across all samples
+      counts <- counts[rowSums(counts) > 0, , drop = FALSE]
+      cat("After zero-row filter:", nrow(counts), "genes and", ncol(counts), "samples\n")
+            # cat() → prints a quick summary
+
+### Grouping into T0 & H24
+
+      ## Build colData for grouping (T0 vs H24) 
+      samples <- colnames(counts)
+      time <- ifelse(grepl("^T", samples), "T0", "H24")
+            # grepl("^T", samples) → TRUE if the sample name starts with "T"
+            # it TRUE the it assigns T0, else H24
+      time <- factor(time, levels = c("T0", "H24"))
+            # factor() → categorical variable
+      coldata <- data.frame(time = time, row.names = samples)
+            # data.frame() → Build up the metadata "table"
+
+### 
+
+      ## ========= STEP 2: FPM screen (>1 in ≥ half of reps per group) =========
+      # DESeq2 needs integer counts; round if your file has decimals
+      dds_raw <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts)),
+                                        colData = coldata,
+                                        design = ~ time)
+      
+      # Raw FPM/CPM-like (before size-factor normalization) for *presence* filtering
+      cpm_raw <- fpm(dds_raw, robust = FALSE)   # keep FALSE to match our pipeline
+      
+      # Keep a gene if FPM>1 in at least half of the replicates in ANY group (T0 or H24)
+      grp <- coldata$time
+      mat_eval <- cpm_raw > 1
+      keep <- rep(FALSE, nrow(mat_eval))
+      cutoff <- ceiling(table(grp) / 2)  # half of replicates per group
+      
+      for (g in levels(grp)) {
+        idx <- which(grp == g)
+        keep <- keep | (rowSums(mat_eval[, idx, drop = FALSE]) >= cutoff[g])
+      }
+      
+      cat("Genes kept by FPM>1 prevalence rule:", sum(keep), "of", length(keep),
+          sprintf("(%.1f%%)\n", 100 * sum(keep) / length(keep)))
+      
+      # Subset your objects for downstream steps
+      counts_filt <- counts[keep, , drop = FALSE]
+      dds_1 <- dds_raw[keep, ]  # we’ll use this for size-factor normalization next
+      
+        # Quick sanity check
+        stopifnot(identical(colnames(counts_filt), rownames(coldata)))
+
+
+
+
+
+
 
 
 
