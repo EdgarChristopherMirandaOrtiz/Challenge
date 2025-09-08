@@ -359,8 +359,94 @@ In RNA-seq:
 
 ### PCA color gene plots
 
+*Missinge the aesthetics and tittles
+
+      ggplot(df_load, aes(x = PCx, y = PCy, color = abs(PCx))) +
+        geom_point(alpha = 0.6, size = 0.6) +
+        scale_color_viridis_c() +
+        theme_classic()
+
+### PCA for TOP genes
+
+Variable that we already defined:
+
+- [pca](#-PCA-→-Principal-Component-Analysis)
+
+- var_exp1
+
+- var_1
+
+- var_2
+
+
+      ## PCA TOP genes ----
+      
+      # Inputs I already have
+      # pca, var_expl, var_1, var_2
+      gene_loadings <- pca$rotation  # safer name than 'loadings()'
+      
+      # Top K by sign (per side)
+      K <- 100
+      pos_genes <- names(sort(gene_loadings[, var_1], decreasing = TRUE))[1:K]
+      neg_genes <- names(sort(gene_loadings[, var_1], decreasing = FALSE))[1:K]
+      
+      # Build df with a 3-level flag
+      df_load <- data.frame(
+        gene = rownames(gene_loadings),
+        PCx  = gene_loadings[, var_1],
+        PCy  = gene_loadings[, var_2],
+        group = "other"
+      )
+      df_load$group[df_load$gene %in% pos_genes] <- "top_pos"
+      df_load$group[df_load$gene %in% neg_genes] <- "top_neg"
+      df_load$group <- factor(df_load$group, levels = c("other","top_pos","top_neg"))
+      
+      # Colors (hex ok)
+      col_other <- "#AF9AB2"  
+      col_pos   <- "#f9665e"  # red
+      col_neg   <- "#799fcb"  # blue  
+      
+      
+      ggplot(df_load, aes(PCx, PCy, color = group)) +
+        geom_point(alpha = 0.65, size = 0.8) +
+        scale_color_manual(
+          values = c(other = col_other, top_pos = col_pos, top_neg = col_neg),
+          labels = c(
+            other   = "Other genes",
+            top_pos = sprintf("Top %d positive on PC%d", K, var_1),
+            top_neg = sprintf("Top %d negative on PC%d", K, var_1)
+          ),
+          name = "Highlight"
+        ) +
+        labs(
+          title = sprintf("PCA – TOP Genes → PC%d vs PC%d", var_1, var_2),
+          x = sprintf("PC%d loadings (%.1f%%)", var_1, var_expl[var_1]),
+          y = sprintf("PC%d loadings (%.1f%%)", var_2, var_expl[var_2])
+        ) +
+        theme_classic(base_size = 12) +     # Relación gráfico vs títulos 
+        theme(
+          plot.title = element_text(face = "bold", hjust = 0.5),      # Moves tittle
+          legend.position = "top"
+        )
+      
+      # The genes on CVS form
+      write.csv(data.frame(gene = pos_genes,
+                           loading = gene_loadings[pos_genes, var_1],
+                           direction = "positive",
+                           PC = paste0("PC", var_1)),
+                sprintf("top_%d_positive_genes_PC%d.csv", K, var_1), row.names = FALSE)
+      
+      write.csv(data.frame(gene = neg_genes,
+                           loading = gene_loadings[neg_genes, var_1],
+                           direction = "negative",
+                           PC = paste0("PC", var_1)),
+                sprintf("top_%d_negative_genes_PC%d.csv", K, var_1), row.names = FALSE)
+
+
+
 
 ### DEG in time
+
 
 
 ### DEGs pattern discovery
