@@ -124,7 +124,7 @@ In DESeq2 package, FPM = Fragments Per Million
 
 <img width="300" height="150" alt="image" src="https://github.com/user-attachments/assets/ca0c1cfd-87b4-4ed5-a3f2-e6ae7d382c02" />
 
-      ##  FPM >1 in ≥ half of reps per group
+      ##  FPM >1 in ≥ half of reps per group -------------
       # HALF → We may have genes that are “off” in T0 but “on” in H24 (or vice versa)
 
       ## 1) Create DESeq 
@@ -173,7 +173,7 @@ In DESeq2 package, FPM = Fragments Per Million
       stopifnot(identical(colnames(counts_filt), rownames(coldata)))
             #Ensures sample names still match perfectly between counts_filt and coldata
 
-## DESeq2 normalization
+### DESeq2 normalization
 
 Size factor nomalization
 
@@ -181,6 +181,7 @@ Size factor nomalization
 
 E.g. one sample may have 15M reads, another 25M → without correction, all counts in the 25M sample would look “higher” just due to depth 
 
+      ## Size-factor normalization (DESeq2)
       dds_1 <- estimateSizeFactors(dds_1)      # median-of-ratios
       sizeFactors(dds_1)[1:5]                  # quick peek(vistazo)
 
@@ -192,15 +193,135 @@ So:
 
 → T5 is almost average (1.00)
 
+### VST - Variance Stabilizing Transform
+
+vst → applies DESeq2’s variance-stabilizing transformation
+
+"Raw counts" follow a negative binomial distribution with variance dependent on mean, what is thy that makes PCA and heatmaps messy
+
+→ Transform this "Raw counts" to the log2-like scale but also stabilizes variance so that genes with high counts don’t dominate
+
+      ## Variance Stabilizing Transform (VST) ---------
+      vst_1   <- vst(dds_1)
+      vst_mat <- assay(vst_1)                  # genes x samples = matrix
+
+<img width="383" height="100" alt="image" src="https://github.com/user-attachments/assets/10d6a18f-c3af-45c6-a31f-7b5a525b9453" />
 
 
+###  Z-score standardization
 
+Standardization across samples, With this each gene now has mean=0, sd=1 across samples
 
+→ Makes it easier to compare patterns of expression across genes
 
+      ## 1)Gene-wise z-score -----------
+      # (center 0, sd 1 across samples)
+      zmat <- t(scale(t(vst_mat)))             # rows = genes, cols = samples
+            # scale() standardizes each column of a matrix by default (mean=0, sd=1)
+            # t(vst_mat) → transpose (samples × genes) and vice versa
 
+        
+      ## 2) Sanity: mean≈0, sd≈1 per gene
+      stopifnot(all(is.finite(zmat)))            # Ensures no NA, NaN, or Inf in the matrix
+      
+      ## 3) mean should be very close to 0
+      cat("Mean of first 5 genes after z-score:\n"); print(rowMeans(zmat[1:5, ]))
+      cat("SD of first 5 genes after z-score:\n"); print(apply(zmat[1:5, ], 1, sd))
 
+<img width="434" height="85" alt="image" src="https://github.com/user-attachments/assets/45c3156e-244c-4341-9346-0faf1d7edea7" />
 
+### PCA → Principal Component Analysis
 
+prcomp() → is R’s function for PCA
+
+      ## PCA on samples (using prcomp) --------
+      
+      # We already z-scored by gene, so no extra scaling here
+      # Input must be samples × features
+      pca <- prcomp(t(zmat), center = FALSE, scale. = FALSE)        # observations = samples
+            # center = FALSE → we don’t need to mean-center features, because z-score already did that
+            # scale. = FALSE → we don’t need to scale to sd = 1, because z-score already did that too.
+      var_expl <- 100 * (pca$sdev^2) / sum(pca$sdev^2)
+            # Each PC has a variance = pca$sdev^2.
+            # Divide by total variance to get % explained by that PC.
+            # Multiply by 100 → nice percentages.
+
+<img width="383" height="55" alt="image" src="https://github.com/user-attachments/assets/8b72e887-f9f7-45ee-b64a-b70c6d927a43" />
+
+### PCA colors
+
+      library(RColorBrewer)   #Color
+      display.brewer.all()
+
+<img width="220" height="330" alt="image" src="https://github.com/user-attachments/assets/339f577b-d3e8-4261-824f-8a557d9b51e0" />
+
+We will use Dark2
+
+      # Colors and legend (robust) 
+      pal_time  <- c(T0 = "#79cbb8", H24 = "#500472")                  # Hex fortmat
+      #pal_time <- setNames(brewer.pal(2, "Dark2"), c("T0", "H24"))    # RColorBrewer
+      col_time  <- pal_time[as.character(coldata$time)]
+            # coldata$time → was the factor with values "T0" or "H24"
+      leg_labs  <- unique(as.character(coldata$time))
+            # unique(...) → collects unique condition labels (E.g. "T0", "H24")
+      leg_labs  <- leg_labs[!is.na(leg_labs)]
+            # removes any possible NA
+
+### PCA plots
+
+Principal Component Analysis (PCA) is a dimensionality reduction technique
+
+In RNA-seq:
+
+→ Each sample (T1…H16) has thousands of gene expression values (a high-dimensional space)
+
+→ PCA finds new axes (principal components) that capture the largest sources of variation in the data
+
+- PC1 = axis that explains the largest % of total variance.
+
+- PC2 = second largest, orthogonal to PC1.
+
+→ Plotting samples on PC1–PC2 shows which samples are more similar or different
+
+      ## PCA plots -----------
+      
+      ## 1) Pick the PCs you want to plot
+      var_1 <- 1
+      var_2 <- 3
+      
+      ## 2) Build a small data frame for ggplot
+      df_pca <- data.frame(
+        x     = pca$x[, var_1],
+        y     = pca$x[, var_2],
+        name  = rownames(pca$x),         # "T1".."H16"
+        time  = factor(coldata$time, levels = c("T0","H24"))  # ensure order
+      )
+      
+      ## 3) PLOT
+      ggplot(df_pca, aes(x, y, color = time, label = name)) +
+        geom_point(size = 2.6) +
+        ggrepel::geom_text_repel(show.legend = FALSE, max.overlaps = Inf, size = 3) +     # Size of each dot
+        scale_color_manual(
+          values = pal_time,                # <- uses your exact palette
+          limits = c("T0","H24"),           # <- fixes legend order & ensures mapping
+          name   = "Time"                   # <- legend title to match base plot
+        ) +
+        labs(
+          title = "PCA – Samples (VST z-scored)",
+          x = sprintf("PC%d (%.1f%%)", var_1, var_expl[var_1]),
+          y = sprintf("PC%d (%.1f%%)", var_2, var_expl[var_2])
+        ) +
+        theme_classic(base_size = 12) +     # Relación gráfico vs títulos 
+        theme(
+          plot.title = element_text(face = "bold", hjust = 0.5),      # Moves tittle
+          legend.position = "right"
+        )
+      
+      ## 4) save PCA matrices
+      # write.csv(pca$x, file = "PCA_samples_scores.csv")      # samples in PC space
+      # write.csv(pca$rotation, file = "PCA_gene_loadings.csv") # genes loadings
+
+<img width="600" height="350" alt="image" src="https://github.com/user-attachments/assets/3f3b560a-073e-4185-897b-3920e5ed2f79" />
 
 
 
