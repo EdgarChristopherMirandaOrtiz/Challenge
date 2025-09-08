@@ -1,4 +1,4 @@
-# Coffea Arabica first period challenge
+# Challenge
 *Coffea arabica* challenge for RUST stress
 
 **_Coffea arabica_ challenge adressed by RNAseq under different types of mutagenesis at different levels of RUST infection**
