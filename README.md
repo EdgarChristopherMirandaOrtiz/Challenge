@@ -267,7 +267,7 @@ We will use Dark2
       leg_labs  <- leg_labs[!is.na(leg_labs)]
             # removes any possible NA
 
-### PCA plots
+### PCA sample plots
 
 Principal Component Analysis (PCA) is a dimensionality reduction technique
 
@@ -296,24 +296,28 @@ In RNA-seq:
         name  = rownames(pca$x),         # "T1".."H16"
         time  = factor(coldata$time, levels = c("T0","H24"))  # ensure order
       )
+                  # pca$x → coordinates of each sample in PCA space
+                  # coldata$time → group each sample into condition/time ("T0"/"H24")
       
       ## 3) PLOT
       ggplot(df_pca, aes(x, y, color = time, label = name)) +
-        geom_point(size = 2.6) +
+        geom_point(size = 2.6) +            # Geometry and size dot
         ggrepel::geom_text_repel(show.legend = FALSE, max.overlaps = Inf, size = 3) +     # Size of each dot
+              # geom_text_repel (from ggrepel) pushes text labels away from each other and from the points
         scale_color_manual(
           values = pal_time,                # <- uses your exact palette
           limits = c("T0","H24"),           # <- fixes legend order & ensures mapping
           name   = "Time"                   # <- legend title to match base plot
         ) +
         labs(
-          title = "PCA – Samples (VST z-scored)",
+          title = sprintf("PCA – Samples → PC%d vs PC%d", var_1, var_2),
           x = sprintf("PC%d (%.1f%%)", var_1, var_expl[var_1]),
           y = sprintf("PC%d (%.1f%%)", var_2, var_expl[var_2])
         ) +
         theme_classic(base_size = 12) +     # Relación gráfico vs títulos 
         theme(
           plot.title = element_text(face = "bold", hjust = 0.5),      # Moves tittle
+                  # theme_classic() → removes grey background, gives a cleaner look
           legend.position = "right"
         )
       
@@ -321,12 +325,51 @@ In RNA-seq:
       # write.csv(pca$x, file = "PCA_samples_scores.csv")      # samples in PC space
       # write.csv(pca$rotation, file = "PCA_gene_loadings.csv") # genes loadings
 
-<img width="600" height="350" alt="image" src="https://github.com/user-attachments/assets/3f3b560a-073e-4185-897b-3920e5ed2f79" />
+<img width="410" height="350" alt="image" src="https://github.com/user-attachments/assets/98d097fd-54e4-4358-851a-d6b934426d4f" />
+
+### PCA gene plot
+
+      ## PCA gene plot  ------
+      ## 1) extract loadings (genes × PCs)
+      loadings <- pca$rotation   # each row = a gene, each column = a PC
+
+            
+      ## 2) build a dataframe for ggplot
+      df_load <- data.frame(
+        gene = rownames(loadings),
+        PCx  = loadings[, var_1],
+        PCy  = loadings[, var_2]
+      )
+      
+      ## 3) ggplot
+      ggplot(df_load, aes(x = PCx, y = PCy)) +
+        geom_point(alpha = 0.4, size = 0.6, color = "#AF9AB2") +
+        labs(
+          title = sprintf("PCA – Genes → PC%d vs PC%d", var_1, var_2),
+          x = sprintf("PC%d loadings (%.1f%%)", var_1, var_expl[var_1]),
+          y = sprintf("PC%d loadings (%.1f%%)", var_2, var_expl[var_2])
+        ) +
+        theme_classic(base_size = 12) +     # Relación gráfico vs títulos 
+        theme(
+          plot.title = element_text(face = "bold", hjust = 0.5),      # Moves tittle
+          legend.position = "right"
+        )
+
+<img width="410" height="350" alt="image" src="https://github.com/user-attachments/assets/3ca56c97-c4d1-47e8-88a2-6c53cd76b39b" />
+
+### PCA color gene plots
 
 
+### DEG in time
 
 
+### DEGs pattern discovery
 
+
+### SOMs
+
+
+### Heatmaps 
 
 
 > [!NOTE]
