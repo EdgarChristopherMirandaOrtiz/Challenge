@@ -7,6 +7,10 @@
 
 Using DESeq2 normalization
 
+Unsupervised plots: (PCA, clustering/heatmaps) 
+
+Don’t use the DESeq2 design. They depend only on the expression matrix we feed
+
 ### Packages
 
       library(kohonen);	# This is the library for the SOM (Self-Organizing maps)
@@ -195,9 +199,10 @@ So:
 
 ### VST - Variance Stabilizing Transform
 
+<a name="vst_1"></a>
 vst → applies DESeq2’s variance-stabilizing transformation
 
-"Raw counts" follow a negative binomial distribution with variance dependent on mean, what is thy that makes PCA and heatmaps messy
+"Raw counts" follow a negative binomial distribution with variance dependent on mean, what is twhy that makes PCA and heatmaps messy
 
 → Transform this "Raw counts" to the log2-like scale but also stabilizes variance so that genes with high counts don’t dominate
 
@@ -233,6 +238,12 @@ Standardization across samples, With this each gene now has mean=0, sd=1 across 
 ### PCA → Principal Component Analysis
 
 prcomp() → is R’s function for PCA
+
+Varirables:
+<a name="pca"></a>
+- pca     
+<a name="var_expl"></a>
+- var_expl
 
       ## PCA on samples (using prcomp) --------
       
@@ -282,6 +293,13 @@ In RNA-seq:
 - PC2 = second largest, orthogonal to PC1.
 
 → Plotting samples on PC1–PC2 shows which samples are more similar or different
+
+**Variables for DIMENSIONS**
+
+<a name="var_1"></a>
+- var_1
+<a name="var_2"></a>
+- var_2
 
       ## PCA plots -----------
       
@@ -359,24 +377,43 @@ In RNA-seq:
 
 ### PCA color gene plots
 
-*Missinge the aesthetics and tittles
+*Missing the aesthetics and tittles
+
+**INCOMPLETE**
 
       ggplot(df_load, aes(x = PCx, y = PCy, color = abs(PCx))) +
         geom_point(alpha = 0.6, size = 0.6) +
         scale_color_viridis_c() +
         theme_classic()
 
+<img width="350" height="350" alt="image" src="https://github.com/user-attachments/assets/ecb5dbc0-73ec-48bd-aee7-691fba9ed119" />
+
+
 ### PCA for TOP genes
 
 Variable that we already defined:
 
-- [pca](#-PCA-→-Principal-Component-Analysis)
+- [pca](#pca)
+- [var_expl](#var_expl)
+- [var_1](#var_1)
+- [var_2](#var_2)
 
-- var_exp1
+→ We're no longer plotting samples (PCA scores, pca$x) → These are the coordinates of each sample on the new PC axes
 
-- var_1
+→ Ww’re plotting **genes using their PCA loadings** (pca$rotation) → the weights that define each PC axis → tell us which genes contribute the most on the separation we saw in the sample plot
 
-- var_2
+→ Everything we did (zero-count filter → FPM > 1 prevalence → sizefactor normalization → VST → z-score per gene) was applied to the gene expression matrix (genes × samples) **That’s the input for PCA**
+
+Meaning: Both samples and genes "see" the same preprocessed data → counts have been normalized, variance-stabilized, and z-scored across samples
+
+> [!TIP]
+> SAMPLES (scores) projection of normalized expression values for each sample → **Do T0 and H24 cluster apart?**
+> 
+> GENES (loadings) coefficients that define how much each gene “pushes” a sample along each PC axis → **Which genes made T0 vs H24 separate on PC1 (positive vs negative side)?**
+
+*scores = where each sample lies in PC space
+
+*loadings = how much each gene contributes to each PC
 
 
       ## PCA TOP genes ----
@@ -385,32 +422,33 @@ Variable that we already defined:
       # pca, var_expl, var_1, var_2
       gene_loadings <- pca$rotation  # safer name than 'loadings()'
       
-      # Top K by sign (per side)
+      ## 1) Top K genes by sign (per side)
       K <- 100
       pos_genes <- names(sort(gene_loadings[, var_1], decreasing = TRUE))[1:K]
       neg_genes <- names(sort(gene_loadings[, var_1], decreasing = FALSE))[1:K]
       
-      # Build df with a 3-level flag
+      ## 2) Build df's with a 3-level flag
       df_load <- data.frame(
         gene = rownames(gene_loadings),
-        PCx  = gene_loadings[, var_1],
-        PCy  = gene_loadings[, var_2],
+        PCx  = gene_loadings[, var_1],            # For each gene, store its loading on PC var_1 (x)
+        PCy  = gene_loadings[, var_2],            # For each gene, store its loading on PC var_2 (y)
         group = "other"
       )
+      ## 2.1) Tag genes as "top_pos", "top_neg", or "other" for coloring.
       df_load$group[df_load$gene %in% pos_genes] <- "top_pos"
       df_load$group[df_load$gene %in% neg_genes] <- "top_neg"
       df_load$group <- factor(df_load$group, levels = c("other","top_pos","top_neg"))
       
-      # Colors (hex ok)
+      ## 3) Colors (hex ok)
       col_other <- "#AF9AB2"  
       col_pos   <- "#f9665e"  # red
       col_neg   <- "#799fcb"  # blue  
       
-      
+      ## 4) Plotting
       ggplot(df_load, aes(PCx, PCy, color = group)) +
         geom_point(alpha = 0.65, size = 0.8) +
         scale_color_manual(
-          values = c(other = col_other, top_pos = col_pos, top_neg = col_neg),
+          values = c(other = col_other, top_pos = col_pos, top_neg = col_neg), # Color of dots
           labels = c(
             other   = "Other genes",
             top_pos = sprintf("Top %d positive on PC%d", K, var_1),
@@ -429,7 +467,7 @@ Variable that we already defined:
           legend.position = "top"
         )
       
-      # The genes on CVS form
+      ## 5) The genes on CVS form
       write.csv(data.frame(gene = pos_genes,
                            loading = gene_loadings[pos_genes, var_1],
                            direction = "positive",
@@ -442,14 +480,310 @@ Variable that we already defined:
                            PC = paste0("PC", var_1)),
                 sprintf("top_%d_negative_genes_PC%d.csv", K, var_1), row.names = FALSE)
 
+<img width="370" height="370" alt="image" src="https://github.com/user-attachments/assets/882f4eb8-7e2f-491a-9c42-a1fa06291b7b" />
+
+> [!WARNING]
+> 
+> Sign is arbitrary
+>
+> With this plot **WE CAN'T SAY** “positive loadings = upregulated genes, negative loadings = repressed genes”
+>
+> Whether a gene appears “positive” or “negative” on PC1 can flip if the algorithm decides the opposite orientation
+>
+> What matters is **relative separation** positive vs negative genes, and how that aligns with your samples on plot, more to the right or to the left
+>
+> Genes with large +PC1 loadings are more associated with H24
+>
+>Genes with large –PC1 loadings are more associated with T0
+
+### Heatmap Sample x Sample
+
+Variable that we already defined:
+
+- [vst_1](#vst_1)
+
+      ## UNSUPERVISED CLUSTERING & HEATMAPS ----
+
+      
+      ## 1) Feedback & Fallback (only if vst_1/vst_mat don't exist) →  Ensuring VST was made
+      if (!exists("vst_1")) {
+        message("vst_1 not found, computing VST from dds_1...")
+        stopifnot(exists("dds_1"))
+        vst_1 <- vst(dds_1)
+      }
+      if (!exists("vst_mat")) vst_mat <- assay(vst_1)   # genes x samples
+         # assay(vst1) → numeric matrix with rows = genes, cols = samples
+
+      ## 2) SAMPLE–SAMPLE CLUSTERING -----------
+      # Use Pearson correlation between samples (robust for RNA-seq after VST)
+      cor_mat <- cor(vst_mat, method = "pearson")           # samples x samples
+      ann_col <- data.frame(time = coldata$time)
+          # Prepares sample annotations (here just time), to color the heatmap margins
+      rownames(ann_col) <- rownames(coldata)
+      stopifnot(identical(colnames(cor_mat), rownames(ann_col)))
+          # Ensures the column order of the matrix matches the row order of the annotations
+      
+      
+      ## 3) Heatmap of correlations sample -sample
+      pheatmap(cor_mat,
+               color            = colorRampPalette(rev(brewer.pal(12, "BrBG")))(255),  # (Darkness, "Color")
+               border_color     = NA,
+               clustering_distance_rows = "euclidean",
+               clustering_distance_cols = "euclidean",
+                        # Clustering → Ward’s method on Euclidean distance applied to the correlation matrix
+               clustering_method = "ward.D2",
+               display_numbers  = FALSE,
+               annotation_col   = ann_col,
+               annotation_row   = ann_col,
+               annotation_colors = list(time = pal_time),
+               main = "Sample–sample correlation")
+  
+<img width="450" height="370" alt="image" src="https://github.com/user-attachments/assets/40b537d2-c99d-487b-a291-64cf9d89c1ad" />
+
+### Dendogram
+
+Hierarchical clustering of samples (or genes), where the height of the branches reflects the distance (or dissimilarity)
+
+      ## Dendogram ------
+
+      ## 1) Compute distance 
+      dist_samples <- dist(t(vst_mat), method = "euclidean")                  # correlation distance
+      
+      ## 2) Hierarchical clustering
+      hc_samples <- hclust(dist_samples, method = "ward.D2")       # method that minimizes variance within cluster
+      
+      ## 3) Plot dendrogram
+      plot(hc_samples, hang = -1, main = "Sample clustering (Euclidean + Ward.D2)")
+            # hang = -1 → forces all sample labels to sit at
+      
+      ## 4)  helper: height that produces exactly k clusters
+      k <- 8      # Here we change the number of clusters we want
+      cut_height_for_k <- function(hc, k) {
+        n <- length(hc$height)
+        stopifnot(k >= 2, k <= n)  # k = 1 means no cut
+              # mid-point between the two merges that separate into k clusters
+        (hc$height[n - k + 1] + ifelse(n - k + 2 <= n, hc$height[n - k + 2], Inf)) / 2
+      }            # hc$height → stores the merge heights at which clusters combine
+
+      # It figures out where to draw the red horizontal line to yield exactly k clusters
+                  # Trick: for k clusters, we cut between the (k-1)-th and k-th largest merges
+                        # (k-1)-th → largest merge height = the step where the tree goes from k clusters to k-1
+                        #  k-th → largest merge height = the step just before that.
+
+      n <- length(hc_samples$height)
+      h_k <- mean(hc_samples$height[c(n - k + 1, n - k + 2)])
+                  # The height computed for chosen k
+      
+      
+      # 5) Add a horizontal cut line (example height = 150, adjust as needed)
+      abline(h = h_k + -1, col="red", lty=2, lwd=2)       # We added a "-1" just to do not cover the other lines
+      
+      # 6) Alternatively, cut into a fixed number of clusters (e.g., k = 2)
+      rect.hclust(hc_samples, k = k, border = "blue")  # draw cluster boxes
+      
+      ## 7) cluster summary tables membership
+      grp <- cutree(hc_samples, k = k)
+      print(grp)               # sample -> cluster id
+      table(grp)               # cluster sizes
+
+<img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/a1fc760a-bf8f-466a-9d6c-bae385b8ab3e" />
+
+### Heatmao Gene x Sample
+
+- VST (Variance Stabilizing Transform) → removes dependence of variance on mean counts, making genes comparable across samples
+
+- Row-z (row scaling) → each gene’s expression values are z-scored (mean = 0, sd = 1 across samples) so patterns are relative per gene, not absolute counts.
+
+- Correlation distance (1 – correlation) → similarity between samples is measured by **how similar their expression profiles are** (ignores absolute magnitude, focuses on shape).
+
+- Ward.D2 clustering method → groups samples/genes by minimizing variance within clusters, producing balanced dendrogram branches.
+
+- Top variable genes → selects the genes with the **highest variance across** samples, which are most informative for clustering patterns.
+
+      ## HEATMAP – TOP VARIABLE GENES -------------
+      
+      ## 1) Select top N most variable genes across samples (after VST)
+      topN <- 1000
+      gene_var <- rowVars(vst_mat)
+      ord <- order(gene_var, decreasing = TRUE)
+      top_idx <- ord[seq_len(min(topN, length(ord)))]
+      mat_top <- vst_mat[top_idx, , drop = FALSE]
+      
+      ## 2) Heatmap (scale by row = z-score per gene)
+      pheatmap(mat_top,
+               scale            = "row",                  # z-score per gene
+               color            = colorRampPalette(brewer.pal(12, "RdBu"))(255),
+               border_color     = NA,
+               show_rownames    = FALSE,
+               show_colnames    = TRUE,
+               clustering_distance_rows = "correlation",
+               clustering_distance_cols = "correlation",
+               clustering_method = "ward.D2",
+               annotation_col   = ann_col,
+               annotation_colors = list(time = pal_time),
+               main = sprintf("Top %d variable genes (VST, row-z)", nrow(mat_top)))
+      
+      ## 3)  SAVE TO FILES -------------------
+      # pdf("sample_correlation_heatmap.pdf", width = 7, height = 6); <repeat heatmap A>; dev.off()
+      # pdf("top_variable_genes_heatmap.pdf", width = 8, height = 8); <repeat heatmap B>; dev.off()
+
+<img width="450" height="350" alt="image" src="https://github.com/user-attachments/assets/180be73a-431a-40dd-a7d9-a4b44ad708c4" />
+
+### ↑↓ DEGs in time TEST
+
+DESeq2 to find **differentially expressed genes** (DEGs)
+
+> [!NOTE]
+> Use of:
+> 
+> **LRT** → Likelihood Ratio Test (LRT), First step
+>
+> **FDR** → False Discovery Rate, Fourth step
+
+Uses a **Likelihood Ratio Test (LRT)** to test the **effect of time (T0 vs H24)**. I’ll go line-by-line and add the “why”
+
+The LRT asks: does the full model (~ time (LEVELS)) explain the counts significantly better than the null (~ 1)?
+
+→ In other words: is there any effect of time on gene expression?
+
+the LRT p-value is essentially testing whether the time coefficient is non-zero. With > 2 levels, LRT is preferred because it tests the overall effect across all levels
+
+→ **HOW FDR works?**
+
+When you test thousands of genes, many will look “significant” just by chance: 
+
+- A raw p-value < 0.05 would mean ~5% false positives per test.
+
+- With 20,000 genes, that’s ~1,000 false positives!
+
+FDR controls the expected proportion of false positives among the genes you call significant
+
+E.g. FDR < 0.01 means: among the genes you flag as DEGs, on average only ~1% are expected to be false discoveries
+
+> [!CAUTION]
+> FIRST IMPORTANT DOCUMENT
+> 
+> Differential expression results → Where we identify which genes have differential expression
+
+      ## DEGs with LRT (time effect) -----------
+
+      ## 1) Fit the full (~ time) vs reduced (~ 1) model with Likelihood Ratio Test
+      dds_1 <- DESeq(dds_1, test = "LRT", reduced = ~ 1)
+             # dds_1 → filtered DESeqDataSet with design ~ time (LEVELS T0 & T24)
+             # test = "LRT" → runs nbinomLRT (likelihood ratio test)
+             # reduced = ~ 1 means the reduced (null) model has no covariates (intercept only)
+             
+      ## 2) Pull results (by default, coefficient is H24 vs T0)
+      res_lrt <- results(dds_1)
+            # Returns a DESeqResults table with one row per gene → log2FoldChange, lfcSE, stat, pvalue, **padj (FDR-adjusted p, FDR-corrected using Benjamini–Hochberg)**
+
+      ## 3)  Replace NA padj with 1 (non-significant) 
+      res_lrt$padj[is.na(res_lrt$padj)] <- 1
+            # Treat NAs as non-significant
+
+      ## 4) Call significant genes by FDR threshold
+      alpha <- 0.01
+            # alpha → FDR cutoff (1% here, false positives among the genes you call significant)
+      deg_mask <- res_lrt$padj < alpha      # boolean vector marking significant genes.
+      cat("DEGs at FDR <", alpha, ":", sum(deg_mask), "genes\n")       # Prints how many DEGs we have at that FDR
+      
+      ## 5) Quick summary table and top rows
+      print(summary(res_lrt))
+      head_res <- as.data.frame(res_lrt[order(res_lrt$padj), ])[1:10, ]
+      cat("\nTop 10 by FDR:\n"); print(head_res)
+        
+      ## 6) Save complete LRT table 
+      # write.csv(as.data.frame(res_lrt), file = "DEG_LRT_time_vs_null.csv")
+            # This is the "Differential expression results"
+                      # Each row means a gene, and it have:
+                                  # log2 fold change (H24 vs T0, by default)
+                                     # p-value and adjusted p-value (FDR)
+                                     # This is where WE identify which genes are significant.
+
+<img width="550" height="100" alt="image" src="https://github.com/user-attachments/assets/29870254-36aa-4e6b-885a-160ea3c7217f" />
+
+- 1 → Started with 26,083 genes that passed the earlier zero-count filter
+
+- 2 → Sets the default FDR threshold (padj < 0.1) **this is only for reporting here — in the final analysis, say: set alpha <- 0.01 (stricter)**
+
+- 3 → Out of the 26,083 genes, 5427 genes (21%) **had a positive log2FoldChange (higher in H24 relative to T0) and were SIGNIFICANT** (alpha <- 0.01)
+
+- 4 → Out of the 26,083 genes, 4881 genes (19%) **had a negative log2FoldChange (lower in H24 relative to T0) and were SIGNIFICANT** (alpha <- 0.01)
+
+- 5 → DESeq2 flags genes as outliers if a single sample drives extreme counts (using Cook’s distance)
+
+- 6 → Genes with very low counts across all samples are often filtered automatically
+
+- 7 → This is the threshold used for "low counts"
+
+- 8 → control outlier filtering via cooksCutoff.
+
+- 9 → tweak filtering of low-information genes with independentFiltering
+
+<img width="470" height="100" alt="image" src="https://github.com/user-attachments/assets/b70ec4aa-d552-4abc-a913-b9bdb6f57750" />
+
+### DEGs for pattern discovery
+
+This allows us to prepare data so that genes are comparable across samples and patterns (clusters, SOM, heatmaps) highlight relative up/down regulation, not absolute counts
+
+> [!IMPORTANT]
+>
+> **→ BIOLOGICAL MEANING**
+>
+> FPM → corrects for sequencing depth and library size = compare gene X in sample T3 vs H10 fairly, because differences aren’t just due to different read totals
+>
+> LOG2 +1 → Expression changes become symmetric and interpretable. E.g. A jump from 10 → 20 counts = log2 fold-change of +1 & A drop from 20 → 10 counts = log2 fold-change of –1
+>
+> Gene-wise z-score → Each gene is centered to its own baseline → mean = 0, sd = 1. E.g. Positive = gene is up-regulated in that sample compared to its own average; Negative = gene is down-regulated
+>
+> Now clustering highlights **patterns of co-regulation** → Genes that rise/fall together across samples cluster into groups. Samples with similar overall expression profiles cluster together
 
 
+> [!CAUTION]
+> SECOND IMPORTANT DOCUMENT
+> 
+> Same DEGs as in the LRT document, but transformed into standardized values (s-scores) for pattern discovery (is the input for PCA, clustering, SOM, heatmaps, etc.)
+      
+      ## Transform DEGs for pattern discovery -------
+      
+      ## 0) make sure we actually have DEGs at FDR < 0.01
+      if (sum(deg_mask) == 0) {
+                # deg_mask is the logical vector from past step where "TRUE" if gene is significant at FDR < 0.01
+        stop("No DEGs at FDR < 0.01. Revisit step ↑↓ DEGs in time TEST or use a different alpha temporarily")
+      }       # If no genes are significant, it stops the script
+        
+      
+      ## 1) Get normalized FPM (uses the size factors we estimated earlier)
+      fpm_norm <- fpm(dds_1)   # normalized CPM-like values
+      DEG_cpm  <- fpm_norm[deg_mask, , drop = FALSE]
+            # Then we subset only DEGs (rows where deg_mask == TRUE)
+      cat("DEG_cpm matrix:", nrow(DEG_cpm), "genes x", ncol(DEG_cpm), "samples\n")
+            # We obtain a matrix → rows = significant genes, columns = sample
+      
+      ## 2) Log2(+1)
+      log2_deg <- log2(DEG_cpm + 1)
+            # log2 → stabilizes variance and makes fold-changes symmetric
+            # The +1 avoids log(0)
+      
+      ## 3) Gene-wise z-score (center 0, sd 1 across samples)
+      cs.log2 <- t(scale(t(log2_deg)))
+            # scale() → standardizes each row to mean = 0, sd = 1, y lo transloca (wrap), change rows with columns
+      
+      ## 4) Quick sanity checks
+      stopifnot(all(is.finite(cs.log2)))      # Ensures no missing/infinite values
+      cat("z-score range:", sprintf("[%.2f, %.2f]\n", min(cs.log2), max(cs.log2)))
+                                              # Prints the z-score range (should be roughly [-3, +3])
+      stopifnot(identical(colnames(cs.log2), rownames(coldata)))
+                                              # Double-checks that samples in matrix = metadata samples
+      
+      ## 5) save intermediates
+      # write.csv(DEG_cpm,  "DEGs_FPM_normalized.csv")
+      # write.csv(cs.log2,  "DEGs_log2p1_zscore.csv")
+            # a processed expression matrix of only the DEGs that passed your FDR cutoff
+            # Rows = significant genes
+            # Columns = samples
+            # Values → z-scores (relative expression; up = positive, down = negative, per gene).
 
-### DEG in time
-
-
-
-### DEGs pattern discovery
 
 
 ### SOMs
