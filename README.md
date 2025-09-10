@@ -7,9 +7,7 @@
 
 Using DESeq2 normalization
 
-Unsupervised plots: (PCA, clustering/heatmaps) 
-
-Don’t use the DESeq2 design. They depend only on the expression matrix we feed
+Unsupervised plots: (PCA, clustering/heatmaps) → They don’t use the DESeq2 design. They depend only on the expression matrix we feed. Los análisis no supervisados (PCA, clustering/heatmaps) no dependen del design de DESeq2; operan sobre la matriz de expresión preprocesada (VST / z-score) 
 
 ### Packages
 
@@ -588,7 +586,7 @@ Hierarchical clustering of samples (or genes), where the height of the branches 
 
 <img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/a1fc760a-bf8f-466a-9d6c-bae385b8ab3e" />
 
-### Heatmao Gene x Sample
+### Heatmap Gene x Sample
 
 - VST (Variance Stabilizing Transform) → removes dependence of variance on mean counts, making genes comparable across samples
 
@@ -596,6 +594,7 @@ Hierarchical clustering of samples (or genes), where the height of the branches 
 
 - Correlation distance (1 – correlation) → similarity between samples is measured by **how similar their expression profiles are** (ignores absolute magnitude, focuses on shape).
 
+<a name="Ward.D2"></a>
 - Ward.D2 clustering method → groups samples/genes by minimizing variance within clusters, producing balanced dendrogram branches.
 
 - Top variable genes → selects the genes with the **highest variance across** samples, which are most informative for clustering patterns.
@@ -628,6 +627,12 @@ Hierarchical clustering of samples (or genes), where the height of the branches 
       # pdf("top_variable_genes_heatmap.pdf", width = 8, height = 8); <repeat heatmap B>; dev.off()
 
 <img width="450" height="350" alt="image" src="https://github.com/user-attachments/assets/180be73a-431a-40dd-a7d9-a4b44ad708c4" />
+
+
+
+
+
+## DEGs in TIME CONTRAST T0 vs T24 CODE
 
 ### ↑↓ DEGs in time TEST
 
@@ -664,6 +669,12 @@ E.g. FDR < 0.01 means: among the genes you flag as DEGs, on average only ~1% are
 > FIRST IMPORTANT DOCUMENT
 > 
 > Differential expression results → Where we identify which genes have differential expression
+>
+> **"This gene is up-regulated at 24h relative to baseline T0"**
+
+- log2FC > 0 → gene is globally up-regulated at H24 compared to T0
+
+- log2FC < 0 → gene is globally down-regulated at H24 compared to T0
 
       ## DEGs with LRT (time effect) -----------
 
@@ -724,7 +735,9 @@ E.g. FDR < 0.01 means: among the genes you flag as DEGs, on average only ~1% are
 
 ### DEGs for pattern discovery
 
-This allows us to prepare data so that genes are comparable across samples and patterns (clusters, SOM, heatmaps) highlight relative up/down regulation, not absolute counts
+This allows us to prepare data so that genes are comparable across samples and patterns **(clusters, SOM, heatmaps)** highlight relative up/down regulation, not absolute counts
+
+→ We normalized, log2-transformed, and z-scored those DEGs (T0 vs 24) only.
 
 > [!IMPORTANT]
 >
@@ -784,12 +797,217 @@ This allows us to prepare data so that genes are comparable across samples and p
             # Columns = samples
             # Values → z-scores (relative expression; up = positive, down = negative, per gene).
 
-
-
 ### SOMs
+
+Self Organizing Maps
+
+→ We trained the self-organizing map using only those (TO vs T24) DEGs
+
+Here we move from PCA-style linear analysis to a **nonlinear clustering method** that groups genes with similar expression dynamics into **"neurons"** on a grid
+
+Empty neurons aren't bad, simply mean “no genes fit this prototype"; and also prevents forcing genes into artificial clusters that don’t match them
+
+      ## Self-Organizing Map (SOM) --------
+      
+      ## 1) Sanity check
+      stopifnot(exists("cs.log2"), nrow(cs.log2) > 0)
+          # Ensures we have the input matrix cs.log2 (DEGs log2-normalized + z-scored)
+      
+      
+      ## 2) Randomness fixing
+      set.seed(42)
+          # SOM training involves random initialization, so this fixes randomness
+      
+      
+      ## 3) SOM grid definition
+      som_grid_axes = 5       # The lenght in neurons as axis
+      som_grid <- kohonen::somgrid(xdim = som_grid_axes, ydim = som_grid_axes, topo = "hexagonal", toroidal = TRUE)
+                              # xdim = 5, ydim = 5 → a 5 × 5 grid = 25 neurons
+                              # topo = "hexagonal" → neurons arranged in a honeycomb pattern (each neuron has 6 neighbors)
+                              # toroidal = TRUE → edges wrap around (like donut), so no neuron is isolated on the edge
+      
+      ## 4) Training of the SOM
+      som_fit <- kohonen::som(
+        as.matrix(cs.log2),        # data: genes × samples, z-scored
+        grid      = som_grid,      # Step 3
+        rlen      = 200,           # training iterations
+        keep.data = TRUE           # keep the original data mapped
+      )
+          # Input → each gene’s profile across samples
+          # Output → a map of neurons where similar genes are grouped
+          # Each gene gets mapped to a "best matching unit" (BMU = a neuron)
+
+      
+      ## 5) Gene classification & codebook vectors
+      classif <- som_fit$unit.classif       # assigns each gene → neuron ID (which neuron the gene belong)
+      names(classif) <- rownames(cs.log2)   # 
+      codes <- som_fit$codes[[1]]           # matrix of prototype expression patterns (25 neurons × samples)
+                  # It's basically each neuron’s "average gene behavior"
+      
+      ## 6) Ploting
+      
+      # CODEBOOK VECTORS → Shows the prototype expression patterns of each neuron
+      plot(som_fit, main = "SOM – Codebook vectors")
+      
+      # MAPPING → Each gene is a dot placed on the neuron it belongs
+      plot(som_fit, type = "mapping", pch = ".", main = "SOM – Mapping")
+      
+      # TRAINING PROGRESS → Learning curve of SOM, error reduction over iterations
+      plot(som_fit, type = "changes", pch = ".", main = "SOM – Training")
+      
+      # COUNTS → Similar to an Histogram → How many genes were asigned at each neuron
+      plot(som_fit, type = "counts", pch = ".", main = "SOM – Genes per neuron")
+      
+      # U-MATRIX → Distance between neurons, like cluster of clusters
+      plot(som_fit, type = "dist.neighbours", pch = ".", main = "SOM – U-matrix")
+      
+      # QUANTIZATION ERROR → low = neuron well represents its genes, high error = more heterogeneous
+      plot(som_fit, type = "quality", pch = ".", main = "SOM – Quantization error")
+  
+<img width="250" height="300" alt="image" src="https://github.com/user-attachments/assets/cd109ace-445a-4a69-ad77-1b6c76c5a475" />
+<img width="250" height="300" alt="image" src="https://github.com/user-attachments/assets/88e8dba5-2f2b-41b4-800f-974331f1414e" />
+<img width="250" height="300" alt="image" src="https://github.com/user-attachments/assets/e7129bf2-13a9-4c38-9c82-25516268bf5f" />
+<img width="250" height="300" alt="image" src="https://github.com/user-attachments/assets/86effcac-b3e2-40e5-8cc2-6a3bcac8809c" />
+<img width="250" height="300" alt="image" src="https://github.com/user-attachments/assets/21a14f14-74d2-4959-8781-9956ebabdcfd" />
+<img width="250" height="300" alt="image" src="https://github.com/user-attachments/assets/472e22b6-ab5c-457a-a78f-9d837e78e3c1" />
+
 
 
 ### Heatmaps 
+
+We are clusterizing and visualizing the SOM neurons/codebooks that summarize DEG (T0 vs T24) patterns
+
+Concepts:
+
+[Ward.D2](#Ward.D2) →  busca las dos agrupaciones que, al unirse, aumenten lo menos posible la varianza interna
+
+**DISTANCES**
+
+- **Euclidean** → For samples (Samples which have similar globally transcriptome)
+
+Measure the straight-line distance  
+
+Sensitive to "magnitude" and overall level of the vectors
+
+Doesn't matter if few genes change too much, the important is the GLOBAL TENDENCY
+
+
+- **Manhattan** → For neurons and SOM codeboooks (Pattern of expression of many genes)
+
+Measure the sum of absolute differences
+
+We want to compare "patterns" not magnitude
+
+Each neuron is a “prototype” of gene behavior
+
+      ## Cluster codebooks + heatmaps --------
+        
+      ## 1) Info calling; codes → neurons x samples (from Step 9)
+      codes <- som_fit$codes[[1]]   # Same matrix of prototype expression patterns (25 neurons × samples)
+      stopifnot(identical(colnames(codes), rownames(coldata)))  # Chekpoint to see if samples align with coldata
+                
+      
+      ## 2) Cluster samples (dendograms) (rows in the heatmap) and neurons (cols) 
+      clust.sample <- hclust(dist(t(codes), method = "euclidean"), method = "ward.D2")
+      clust.neuron <- hclust(dist(codes,   method = "manhattan"), method = "ward.D2")
+      
+      
+      ## 3) Row annotations (samples) + colors
+      ann_row <- data.frame(time = coldata$time)
+      rownames(ann_row) <- rownames(coldata)
+      ann_colors <- list(time = c(T0 = "#b89d47", H24 = "#fe9179"))  # named palette
+      
+      
+      ## 4) Ploting → Heatmap 1: SOM codebooks (samples × neurons) 
+      pheatmap(t(codes),
+               border_color  = "grey60",
+               scale         = "column",          # standardize each neuron across samples by z-score
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample,      # use our dendrogram for samples
+               cutree_rows   = 2,
+               annotation_row = ann_row,
+               cluster_cols  = clust.neuron,      # dendrogram for neurons
+               cutree_cols   = 3,
+               annotation_colors = ann_colors,
+               main = "SOM codebooks — samples × neurons")
+      
+      ## 5) Neuron clusters (at k clusters)
+      k_neuron  <- 4                              # Aquí se cámbia 
+      clust.pat <- cutree(clust.neuron, k = k_neuron)        # vector: nombre_neurona -> 1..k
+      clust.aux <- paste0("C", clust.pat)                    # "C1","C2",...,"Ck"
+      names(clust.aux) <- names(clust.pat)
+      
+      
+      ## 6) Column annotation (neurons)
+      ann_col <- data.frame(neuron_cluster = clust.aux)
+      rownames(ann_col) <- names(clust.aux)
+      
+      
+      ## 7) Color palette 
+      pal_nc <- colorRampPalette(brewer.pal(8, "Set2"))(k_neuron)  # generates k colors
+      names(pal_nc) <- paste0("C", seq_len(k_neuron))
+      
+      
+      ## 8) Colores OF 'time' 
+      ann_colors <- list(
+        time = c(T0 = "#b89d47", H24 = "#fe9179"),
+        neuron_cluster = pal_nc
+      )
+      
+      
+      ## 9) VERY IMPORTANT → forcing the factor to have the exact levels of palette
+      ann_col$neuron_cluster <- factor(ann_col$neuron_cluster,
+                                       levels = names(ann_colors$neuron_cluster))
+      
+      
+      ## 10) Heatmap 2: with neuron-cluster colors on columns
+      pheatmap(t(codes),
+               border_color  = "grey60",
+               scale         = "column",
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample,      cutree_rows = 2,
+               annotation_row = ann_row,
+               cluster_cols  = clust.neuron,      cutree_cols = k_neuron,
+               annotation_col = ann_col,
+               annotation_colors = ann_colors,
+               main = "SOM codebooks — with neuron clusters")
+      
+      
+      ## 11) Map each gene to a neuron cluster (pattern type)
+      type.pattern <- clust.pat[classif]          # classif → Which genes belongs to which neuron
+      names(type.pattern) <- names(classif)
+      cat("Genes per neuron cluster:\n"); print(table(type.pattern))
+      
+      # (Optional) save outputs
+      # write.csv(codes, file = "SOM_codebooks_neuron_by_sample.csv")
+      # write.csv(data.frame(gene = names(type.pattern),
+      #                      neuron_cluster = paste0("C", type.pattern)),
+      #           file = "genes_to_SOM_clusters.csv", row.names = FALSE)
+
+<img width="250" height="200" alt="image" src="https://github.com/user-attachments/assets/e89137da-948f-4053-a3ce-9742481c772a" />
+
+<img width="250" height="200" alt="image" src="https://github.com/user-attachments/assets/6c89348b-0447-4000-9ff9-5d3e321140e1" />
+
+<img width="300" height="30" alt="image" src="https://github.com/user-attachments/assets/6ca1fabb-39a6-4f88-9f36-4b0cb4904d98" />
+
+
+
+
+
+## DEGs in TIME CONTRAST T0 vs T24 CODE
+
+
+
+
+Analicemos pathways
+Los csv no analicemos module archives "es priorizar"
+
+<img width="1919" height="1199" alt="image" src="https://github.com/user-attachments/assets/026de977-6b07-42a5-851b-ba6f25eba874" />
+
+eggnote es estadistica aplicada → Cualquier persona que use estadistica aplicada le puede llamar AI
+
 
 
 > [!NOTE]
