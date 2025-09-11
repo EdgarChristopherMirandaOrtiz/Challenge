@@ -546,6 +546,7 @@ Hierarchical clustering of samples (or genes), where the height of the branches 
 
       ## 1) Compute distance 
       dist_samples <- dist(t(vst_mat), method = "euclidean")                  # correlation distance
+      # dist_samples <- dist(t(vst_mat[,c(-7,-8, -9, -15, -16)]), method = "euclidean") 
       
       ## 2) Hierarchical clustering
       hc_samples <- hclust(dist_samples, method = "ward.D2")       # method that minimizes variance within cluster
@@ -873,7 +874,7 @@ Empty neurons aren't bad, simply mean “no genes fit this prototype"; and also 
 
 
 
-### Heatmaps 
+### Heatmaps of SOM
 
 We are clusterizing and visualizing the SOM neurons/codebooks that summarize DEG (T0 vs T24) patterns
 
@@ -992,12 +993,955 @@ Each neuron is a “prototype” of gene behavior
 
 <img width="300" height="30" alt="image" src="https://github.com/user-attachments/assets/6ca1fabb-39a6-4f88-9f36-4b0cb4904d98" />
 
+## Annotation & Enrichment 0 vs 24       
 
 
 
+*Este script fue obtenido y modificado del código realizado por el Dr. Carlos, se detallan las modificaciones realizadas y el why of the changes/adaptations:
 
-## DEGs in TIME CONTRAST T0 vs T24 CODE
+- counts  → ya teníamos counts leído, filtrado por ceros, y lo más importante es que el objeto dds_1 con el diseño, los size factors, etc
 
+> [!CAUTION]
+> THIRD IMPORTANT DOCUMENT
+> 
+> ALL ENRICHMENT MODULE, PATHWAYS (ko or map) 41 documents
+
+Full anotation document ()
+
+      ## === 1) Universo y lista de DEGs coherentes con nuestra tubería ===
+      universe_genes <- rownames(vst_mat)              # o rownames(dds_1)
+      deg_genes      <- rownames(DEG_cpm)              # los significativos (FDR<0.01)
+      
+      ## === 2) Lee anotaciones ===
+      ann <- read.delim("fullAnnotation.tsv.txt",
+                        stringsAsFactors = FALSE,
+                        row.names = 1)
+      
+      ## Helper para tokenizar columnas multivalor separadas por coma
+      tokenize <- function(x) {
+        x <- x[!is.na(x)]
+        toks <- unlist(strsplit(x, ",", fixed = TRUE), use.names = FALSE)
+        toks <- trimws(toks)
+        toks[toks != ""]
+      }
+      
+      ## === 3) Función ORA (Over-Representation Analysis) por columna ===
+      run_ora <- function(category_col, universe, hits, ann_df) {
+        # universo y hits presentes en anotación
+        bg_vals  <- ann_df[intersect(universe, rownames(ann_df)), category_col]
+        hit_vals <- ann_df[intersect(hits,     rownames(ann_df)), category_col]
+        
+        pop      <- table(tokenize(bg_vals))          # población por término
+        aux      <- table(tokenize(hit_vals))         # hits por término
+        if (length(pop) == 0 || length(aux) == 0) {
+          return(list(p=structure(numeric(0)), fdr=structure(numeric(0))))
+        }
+        
+        # vector de hits alineado a pop
+        hit <- setNames(integer(length(pop)), names(pop))
+        hit[names(aux)] <- as.integer(aux)
+        
+        # parámetros hipergeométrica
+        M <- sum(pop)                                 # total etiquetas en universo
+        n <- sum(hit)                                 # total etiquetas en hits
+        
+        pvals <- setNames(rep(1, length(pop)), names(pop))
+        for (k in names(pop)) {
+          # P(X >= hit[k]) con X~Hiper(M, pop[k], n)
+          pvals[k] <- phyper(hit[k]-1, pop[k], M - pop[k], n, lower.tail = FALSE)
+        }
+        fdr <- p.adjust(pvals, method = "fdr")
+        list(p = pvals, fdr = fdr, pop = pop, hit = hit)
+      }
+      
+      ## === 4) Ejecuta para KEGG_Pathway y KEGG_Module (si existen) ===
+      cats <- intersect(c("KEGG_Pathway", "KEGG_Module"), colnames(ann))
+      ora_res <- lapply(cats, run_ora,
+                        universe = universe_genes,
+                        hits     = deg_genes,
+                        ann_df   = ann)
+      names(ora_res) <- cats
+      
+      ## === 5) Escribe resultados y genes por término significativo ===
+      for (cat in names(ora_res)) {
+        res <- ora_res[[cat]]
+        if (!length(res$fdr)) next
+        out_tab <- data.frame(term = names(res$fdr),
+                              pval = unname(res$p[names(res$fdr)]),
+                              FDR  = unname(res$fdr),
+                              pop_count = unname(res$pop[names(res$fdr)]),
+                              hit_count = unname(res$hit[names(res$fdr)]))
+        out_tab <- out_tab[order(out_tab$FDR), ]
+        write.table(out_tab,
+                    file = sprintf("Enrichment_FDR_%s.tsv", cat),
+                    sep  = "\t", quote = FALSE, row.names = FALSE)
+        
+        sig_terms <- out_tab$term[out_tab$FDR < 0.05]
+        for (term in sig_terms) {
+          gene_list <- rownames(ann)[grepl(term, ann[[cat]], fixed = TRUE)]
+          gene_list <- intersect(gene_list, deg_genes)
+          if (!length(gene_list)) next
+          gene_out <- cbind(DEG_cpm[gene_list, , drop = FALSE],
+                            ann[gene_list, grep("KEGG", colnames(ann), fixed = TRUE), drop = FALSE])
+          write.table(gene_out,
+                      file = sprintf("Enrichment_FDR_%s_%s.tsv", cat, term),
+                      sep  = "\t", quote = FALSE)
+        }
+      }
+**Enrichment_FDR_KEGG_Pathway**
+
+Archivo del profe: 
+<img width="933" height="681" alt="image" src="https://github.com/user-attachments/assets/0ba334f0-7149-47e4-9c58-720578dcf48e" />
+
+Nuestro archivo: 
+<img width="1176" height="976" alt="image" src="https://github.com/user-attachments/assets/17c36284-1d2f-46f9-91c4-41b0d1f11384" />
+
+
+### Heatmaps of DEGs 0 vs 24
+
+      ## Heatmaps de DEGs
+      
+      
+      ## 1) Heatmap clásico de DEGs (genes × muestras)
+      
+      # ---- LIBRERÍAS ----
+      library(pheatmap)
+      library(RColorBrewer)
+      library(matrixStats)
+      
+      # ---- ENTRADAS QUE YA TIENES ----
+      # cs.log2  : matriz DEGs z-score (genes x muestras)
+      # coldata  : data.frame con rownames = nombres de muestra y al menos la columna `time` (T0 / H24)
+      
+      stopifnot(identical(colnames(cs.log2), rownames(coldata)))
+      
+      # Paleta para condición/tiempo (ajústala si ya definiste una)
+      pal_time <- c(T0 = "#79cbb8", H24 = "#500472")
+      
+      # Anotación de columnas (muestras)
+      ann_col <- data.frame(time = coldata$time)
+      rownames(ann_col) <- rownames(coldata)
+      ann_colors <- list(time = pal_time)
+      
+      # (Opcional) si hay muchos DEGs, mostrar los más variables para que sea legible
+      topN_1 <- min(2000, nrow(cs.log2))
+      ord  <- order(rowVars(cs.log2), decreasing = TRUE)
+      matH <- cs.log2[ord[seq_len(topN_1)], , drop = FALSE]
+      
+      # Heatmap
+      pheatmap(
+        matH,
+        scale                  = "none",                             # ya está en z-score
+        color                  = colorRampPalette(rev(brewer.pal(11, "RdBu")))(256),
+        clustering_distance_rows = "correlation",
+        clustering_distance_cols = "correlation",
+        clustering_method      = "ward.D2",
+        show_rownames          = FALSE,
+        show_colnames          = TRUE,
+        annotation_col         = ann_col,
+        annotation_colors      = ann_colors,
+        border_color           = NA,
+        main                   = sprintf("DEGs T0 vs H24 — %d genes (z-score por gen)", nrow(matH))
+      )
+
+
+<img width="716" height="606" alt="image" src="https://github.com/user-attachments/assets/687922f8-eff7-4656-9206-cb3b50e5a5af" />
+
+      
+      ## 2) Heatmap de DEGs con anotaciones ricas (tiempo, severidad, variedad, tratamiento)
+      
+      
+      # Si no tenemos nuestro archivo, bosquejo rápido:
+      sample_info <- data.frame(
+        time        = coldata$time,                                    # ya lo tenemos
+        severidad   = factor(c("baja","baja","baja","baja","alta","alta","alta","baja",
+                               "baja","baja","baja","baja","alta","alta","alta","baja"), 
+                             levels = c("baja","alta")),
+        variedad    = factor(c("catuai_mutante","catuai_mutante","catuai_mutante","catuai_mutante",
+                               "catuai_mutante","catuai_mutante","catuai_wildtype","catuai_wildtype",
+                               "catuai_mutante","catuai_mutante","catuai_mutante","catuai_mutante",
+                               "catuai_mutante","catuai_mutante","catuai_wildtype","catuai_wildtype")),
+        tratamiento = factor(c("EMS","azida de sodio","EMS","azida de sodio","EMS","azida de sodio","sin mutación","sin mutación",
+                               "EMS","azida de sodio","EMS","azida de sodio","EMS","azida de sodio","sin mutación","sin mutación"))
+      )
+      rownames(sample_info) <- rownames(coldata)
+      
+      # Chequeo
+      stopifnot(identical(rownames(sample_info), colnames(cs.log2)))
+      
+      # Paletas para cada anotación
+      pal_time      <- c(T0 = "#79cbb8", H24 = "#500472")
+      pal_severidad <- c(baja = "#88c057", alta = "#f06355")
+      pal_variedad  <- c(catuai_mutante = "#6fa8dc", catuai_wildtype = "#ffd966")
+      pal_trat      <- setNames(RColorBrewer::brewer.pal(6, "Set2")[1:nlevels(sample_info$tratamiento)],
+                                levels(sample_info$tratamiento))
+      
+      ann_colors <- list(
+        time        = pal_time,
+        severidad   = pal_severidad,
+        variedad    = pal_variedad,
+        tratamiento = pal_trat
+      )
+      
+      # Selección de genes (reutilizamos matH del Heatmap DEGs genes*samples)
+      if (!exists("matH")) {
+        topN <- min(2000, nrow(cs.log2))
+        ord  <- order(matrixStats::rowVars(cs.log2), decreasing = TRUE)
+        matH <- cs.log2[ord[seq_len(topN)], , drop = FALSE]
+      }
+      
+      # Heatmap con múltiples anotaciones
+      pheatmap(
+        matH,
+        scale                     = "none",
+        color                     = colorRampPalette(rev(brewer.pal(11, "RdBu")))(256),
+        clustering_distance_rows  = "correlation",
+        clustering_distance_cols  = "correlation",
+        clustering_method         = "ward.D2",
+        show_rownames             = FALSE,
+        show_colnames             = TRUE,
+        annotation_col            = sample_info[, c("time","severidad","variedad","tratamiento"), drop = FALSE],
+        annotation_colors         = ann_colors,
+        border_color              = NA,
+        main                      = "DEGs T0 vs H24 — con anotaciones"
+      )
+
+<img width="716" height="606" alt="image" src="https://github.com/user-attachments/assets/326e0f71-c91f-4468-8797-b38ee8955d77" />
+      
+      # Heatmap de enrequeciemiento
+      
+      library(pheatmap)
+      library(dplyr)
+      library(readr)
+      
+      # 1) Filtra/colapsa:
+      kegg_clean <- kegg %>%
+        mutate(core = sub("^(ko|map)", "", term)) %>%
+        group_by(core) %>% slice_min(FDR, with_ties = FALSE) %>% ungroup() %>%
+        mutate(score = -log10(FDR))
+      if (!"term_name" %in% names(kegg_clean)) kegg_clean$term_name <- kegg_clean$term
+      
+      # 2) (Opcional) filtra categorías no vegetales (enfermedades humanas)
+      drop_pat <- grepl("^map05", kegg_clean$term) |
+        grepl("diabetes|cancer|cardio|Alzheimer|Parkinson|disease",
+              kegg_clean$term_name, ignore.case = TRUE)
+      kegg_clean <- kegg_clean[!drop_pat, ]
+      
+      # 3) Top N ordenado por FDR
+      topN_2 <- 30
+      #kegg_top <- kegg_clean %>% arrange(FDR) %>% slice_head(n = min(topN_2, n())) # arroja error
+      kegg_top <- kegg_clean %>% arrange(FDR) %>% slice_head(n = min(topN_2, nrow(.)))
+      # kegg_top <- head(arrange(kegg, FDR), topN) # No indica los nombres
+      
+      # 4) Matriz pathway × contraste
+      mat_path <- matrix(kegg_top$score, ncol = 1)
+      rownames(mat_path) <- kegg_top$term_name
+      colnames(mat_path) <- "All_DEGs (T0 vs H24)"
+      
+      # 5) Heatmap (sin dendrograma de filas)
+      pheatmap(
+        mat_path,
+        cluster_rows  = FALSE,   # <- sin dendrograma
+        cluster_cols  = FALSE,
+        color         = colorRampPalette(c("#ffffff","#ffe082","#f57c00","#b71c1c"))(256),
+        show_rownames = TRUE,
+        main          = "KEGG pathway enrichment (−log10 FDR)"
+      )
+
+<img width="716" height="606" alt="image" src="https://github.com/user-attachments/assets/5d32242e-ec84-4bf8-98b7-8caa459df3be" />
+
+### Venn diagram of DEGs 0 vs 24
+
+
+# Venn Diagrams -------
+
+      library(VennDiagram)
+      
+      deg_up   <- rownames(res_lrt)[res_lrt$padj < 0.01 & res_lrt$log2FoldChange > 0]
+      deg_down <- rownames(res_lrt)[res_lrt$padj < 0.01 & res_lrt$log2FoldChange < 0]
+      
+      venn.plot <- venn.diagram(
+        x = list(
+          "Upregulated (H24)"   = deg_up,
+          "Downregulated (H24)" = deg_down
+        ),
+        filename = NULL,
+        fill = c("#66c2a5", "#fc8d62"),
+        alpha = 0.5,
+        cex = 1.5,
+        cat.cex = 1.5,
+        cat.pos = 0
+      )
+      grid::grid.draw(venn.plot)
+
+<img width="716" height="606" alt="image" src="https://github.com/user-attachments/assets/b4506a52-bba1-4394-b91a-c98a2a33b2be" />
+
+
+## MAIN CONTRAST CODE
+
+      # Coffea arabica challenge adressed by RNAseq under different types of mutagenesis at different levels of RUST infection
+      
+      # Packages ------
+      
+      library(kohonen);	      #This is the library for the SOM
+      library(ggplot2);     	#This library is for transparency in the colors
+      library(ggrepel)
+      library(gplots);	      #Easy heatmaps también pheat más facile
+      library(VennDiagram);	  #self explanatory
+      library(pheatmap);	    #pretty heatmaps
+      library(dendsort);    	#sorting dendrograms ayudar a rotar los dendogramas a
+      library(DESeq2);	      #Normalization and everything related to that
+      library(RColorBrewer)   #Color
+      library(matrixStats)   # rowVars
+      
+      
+      # INPUT -----
+      url_rna_counts <- "https://raw.githubusercontent.com/jmvillalobos/RNAseq_curso2025/refs/heads/main/Cara_RNAc90_counts.txt"
+      #url_rna_counts <- "Cara_RNAc90_counts.txt"
+      
+      # MAIN RAW DATA 
+      rust_counts <- read.table(url_rna_counts, header = TRUE, row.names = 1, sep = "\t", check.names = FALSE)
+      
+      head(rust_counts)
+      
+      
+      
+      
+      
+      # SIMPLE SHORT NAMES ----
+      counts <- rust_counts
+      
+      ## 1) Build simple names 
+      raw_names <- colnames(counts)
+      simple    <- sub("^([TH])(\\d+).*", "\\1\\2", raw_names)
+      
+      ## 2) Apply and check
+      colnames(counts) <- simple
+      if (any(duplicated(colnames(counts)))) stop("Duplicate sample names after renaming")
+      print(colnames(counts))
+      head(counts)
+      
+      ## 3) Reorder from 1 to 16
+      pref <- substr(colnames(counts), 1, 1)                     # "T" or "H"
+      num  <- as.numeric(sub("^[TH]", "", colnames(counts)))     # numeric index
+      ord  <- order(factor(pref, levels=c("T","H")), num)
+      counts <- counts[, ord]
+      print(colnames(counts))
+      
+      ## Ensure we have exactly the expected set name-info
+      expected <- c(paste0("T", 1:8), paste0("H", 9:16))
+      missing  <- setdiff(expected, colnames(counts))
+      extra    <- setdiff(colnames(counts), expected)
+      if (length(missing)) stop("Missing: ", paste(missing, collapse=", "))
+      if (length(extra))   stop("Extra: ",   paste(extra, collapse=", "))
+      
+      
+      
+      
+      
+      
+      # Zero-count filter -----
+      
+      # Drop genes with zero counts across all samples
+      counts <- counts[rowSums(counts) > 0, , drop = FALSE]
+      cat("After zero-row filter:", nrow(counts), "genes and", ncol(counts), "samples\n")
+      
+      
+      
+      
+      
+      # Nuevo grouping -----
+      ### grupos A/B/Control ----
+      
+      # Nos quedamos solo con H9–H15 (excluye H16)
+      keep_samples <- c("H9","H10","H11","H12","H13","H14","H15")
+      stopifnot(all(keep_samples %in% colnames(counts)))
+      counts <- counts[, keep_samples, drop = FALSE]
+      
+      # Etiquetado de grupos:
+      #  A = alta susceptibilidad → H13, H14
+      #  B = resistencia/baja severidad → H10, H12, H11, H9
+      #  Control = H15 (Catuaí WT)
+      grupo <- setNames(rep(NA_character_, length(keep_samples)), keep_samples)
+      grupo[c("H13","H14")]                 <- "A"
+      grupo[c("H10","H12","H11","H9")]      <- "B"
+      grupo["H15"]                          <- "Control"
+      
+      coldata <- data.frame(
+        grupo = factor(grupo, levels = c("A","B","Control")),
+        row.names = names(grupo)
+      )
+      
+      # chequeo rápido
+      stopifnot(!any(is.na(coldata$grupo)))
+      print(coldata)
+      
+      
+      
+      
+      
+      
+      
+      ## FPM screen ----
+      
+      # DESeq2 necesita counts enteros
+      dds_raw <- DESeqDataSetFromMatrix(
+        countData = as.matrix(round(counts)),
+        colData   = coldata,
+        design    = ~ grupo
+      )
+      
+      # FPM-like (antes de normalizar por size factors)
+      cpm_raw <- fpm(dds_raw, robust = FALSE)
+      
+      # Regla de prevalencia: FPM > 1 en al menos la mitad de réplicas del grupo
+      grp     <- coldata$grupo
+      mat_eval <- cpm_raw > 1
+      # como nuestro Control = 1 muestra, exigir ≥ 1 ya es lo máximo posible. Si no, perdemos genes expresados solo ahí
+      keep <- rep(FALSE, nrow(mat_eval))
+      cutoff <- ceiling(table(grp) / 2)  # A=1, B=2, Control=1
+            # Para A (2 muestras: H13, H14) → cutoff = 1 (al menos 1 de las 2 debe pasar).
+            # Para B (4 muestras: H10, H12, H11, H9) → cutoff = 2 (al menos 2 de 4 deben pasar).
+            # Para Control (1 muestra: H15) → cutoff = 1 (basta con que en esa única muestra FPM > 1).
+      
+      
+      for (g in levels(grp)) {
+        idx <- which(grp == g)
+        keep <- keep | (rowSums(mat_eval[, idx, drop = FALSE]) >= cutoff[g])
+      }
+      
+      cat("Genes kept by FPM > 1 prevalence rule:", sum(keep), "of", length(keep),
+          sprintf(" (%.1f%%)\n", 100 * sum(keep) / length(keep)))
+      
+      # Subset
+      counts_filt <- counts[keep, , drop = FALSE]
+      dds_1 <- dds_raw[keep, ]
+      
+      # Quick sanity check
+      stopifnot(identical(colnames(counts_filt), rownames(coldata)))
+      
+      
+      
+      
+      
+      
+      ## Size-factor normalization (DESeq2) ------
+      dds_1 <- estimateSizeFactors(dds_1)      # median-of-ratios
+      sizeFactors(dds_1)
+      sizeFactors(dds_1)[1:5]     # Quick peek
+      
+      
+      
+      
+      
+      ## Variance Stabilizing Transform (VST) -------
+      vst_1   <- vst(dds_1)
+      vst_mat <- assay(vst_1)                  # genes x samples
+      head(vst_mat)
+      
+      
+      
+      
+      
+      
+      
+      ## Gene-wise z-score ----
+      zmat <- t(scale(t(vst_mat)))
+      
+      # Now our columns are H9 to H15
+      stopifnot(all(is.finite(zmat)))
+      cat("Mean of first 5 genes after z-score:\n"); print(rowMeans(zmat[1:5, ]))
+      cat("SD of first 5 genes after z-score:\n"); print(apply(zmat[1:5, ], 1, sd))
+      
+      
+      
+      
+      
+      
+      
+      ## PCA on samples (using prcomp) --------
+      
+      # We already z-scored by gene, so no extra scaling here.
+      # zmat viene de VST + z-score (genes x muestras)
+      pca <- prcomp(t(zmat), center = FALSE, scale. = FALSE)  # observations = samples
+      var_expl <- 100 * (pca$sdev^2) / sum(pca$sdev^2)
+      
+      
+      
+      
+      # Colors and legend (robust) ----
+      pal_grupo <- c(A = "#e41a1c", B = "#377eb8", Control = "#4daf4a")
+      col_grupo <- pal_grupo[as.character(coldata$grupo)]
+      leg_labs  <- levels(coldata$grupo)
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      ## PCA plots -----------
+      
+      ## 1) Pick the PCs you want to plot
+      var_1 <- 1
+      var_2 <- 2
+      
+      ## 2) Build a small data frame for ggplot
+      df_pca <- data.frame(
+        x     = pca$x[, var_1],
+        y     = pca$x[, var_2],
+        name  = rownames(pca$x),        # "H9".."H16"
+        grupo = factor(coldata$grupo, levels = levels(coldata$grupo)) # ensure order
+      )
+      # pca$x → coordinates of each sample in PCA space
+      # coldata$time → group each sample into condition/time ("T0"/"H24")
+      
+      ## 3) PLOT
+      ggplot(df_pca, aes(x, y, color = grupo, label = name)) +
+        geom_point(size = 2.6) +
+        ggrepel::geom_text_repel(show.legend = FALSE, max.overlaps = Inf, size = 3) +
+        scale_color_manual(values = pal_grupo, name = "Grupo") +
+        labs(
+          title = sprintf("PCA – Samples → PC%d vs PC%d", var_1, var_2),
+          x = sprintf("PC%d (%.1f%%)", var_1, var_expl[var_1]),
+          y = sprintf("PC%d (%.1f%%)", var_2, var_expl[var_2])
+        ) +
+        theme_classic(base_size = 12) +
+        theme(plot.title = element_text(face = "bold", hjust = 0.5))
+      
+      ## 4) save PCA matrices
+      # write.csv(pca$x, file = "PCA_samples_scores.csv")      # samples in PC space
+      # write.csv(pca$rotation, file = "PCA_gene_loadings.csv") # genes loadings
+      
+      
+      
+      
+      
+      
+      ## PCA gene plot  ------
+      # Step 1: extract loadings (genes × PCs)
+      loadings <- pca$rotation   # each row = a gene, each column = a PC
+      
+      
+      # Step 3: build a dataframe for ggplot
+      df_load <- data.frame(
+        gene = rownames(loadings),
+        PCx  = loadings[, var_1],
+        PCy  = loadings[, var_2]
+      )
+      
+      # Step 4: ggplot
+      ggplot(df_load, aes(x = PCx, y = PCy, color = abs(PCx))) +
+        geom_point(alpha = 0.4, size = 0.6, color = "#AF9AB2") +
+        scale_color_viridis_c() +
+        labs(
+          title = sprintf("PCA – Genes ", var_1),
+          x = sprintf("PC%d loadings (%.1f%%)", var_1, var_expl[var_1]),
+          y = sprintf("PC%d loadings (%.1f%%)", var_2, var_expl[var_2]),
+          color = sprintf("|loading PC%d|", var_1)
+        ) +
+        theme_classic(base_size = 12) +
+        theme(plot.title = element_text(face = "bold", hjust = 0.5))
+      
+      
+      # 5) COLORFULL PLOT PCA
+      ggplot(df_load, aes(x = PCx, y = PCy, color = abs(PCx))) +
+        geom_point(alpha = 0.6, size = 0.6) +
+        scale_color_viridis_c() +
+        labs(
+          title = sprintf("PCA – Genes (|loading PC%d|)", var_1),
+          x = sprintf("PC%d loadings (%.1f%%)", var_1, var_expl[var_1]),
+          y = sprintf("PC%d loadings (%.1f%%)", var_2, var_expl[var_2]),
+          color = sprintf("|loading PC%d|", var_1)
+        ) +
+        theme_classic(base_size = 12) +
+        theme(plot.title = element_text(face = "bold", hjust = 0.5))
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      ## PCA TOP genes ----
+      
+      # Inputs I already have
+      # pca, var_expl, var_1, var_2
+      gene_loadings <- pca$rotation  # safer name than 'loadings()'
+      
+      # Top K by sign (per side)
+      K <- 100  # cambia a gusto
+      ord_pos <- order(gene_loadings[, var_1], decreasing = TRUE)
+      ord_neg <- order(gene_loadings[, var_1], decreasing = FALSE)
+      pos_genes <- rownames(gene_loadings)[ord_pos][1:K]
+      neg_genes <- rownames(gene_loadings)[ord_neg][1:K]
+      
+      # Build df with a 3-level flag
+      df_load_top <- transform(df_load, group = "other")
+      df_load_top$group[df_load_top$gene %in% pos_genes] <- "top_pos"
+      df_load_top$group[df_load_top$gene %in% neg_genes] <- "top_neg"
+      df_load_top$group <- factor(df_load_top$group, levels = c("other","top_pos","top_neg"))
+      
+      # Colors (hex ok)
+      col_other <- "#AF9AB2"  
+      col_pos   <- "#f9665e"  # red
+      col_neg   <- "#799fcb"  # blue  
+      
+      
+      ggplot(df_load_top, aes(PCx, PCy, color = group)) +
+        geom_point(alpha = 0.65, size = 0.8) +
+        scale_color_manual(
+          values = c(other = col_other, top_pos = col_pos, top_neg = col_neg),
+          labels = c(
+            other   = "Other genes",
+            top_pos = sprintf("Top %d positive on PC%d", K, var_1),
+            top_neg = sprintf("Top %d negative on PC%d", K, var_1)
+          ),
+          name = "Highlight"
+        ) +
+        labs(
+          title = sprintf("PCA – TOP Genes → PC%d vs PC%d", var_1, var_2),
+          x = sprintf("PC%d loadings (%.1f%%)", var_1, var_expl[var_1]),
+          y = sprintf("PC%d loadings (%.1f%%)", var_2, var_expl[var_2])
+        ) +
+        theme_classic(base_size = 12) +
+        theme(plot.title = element_text(face = "bold", hjust = 0.5))
+      
+      # (Opcional) exportar listas
+      write.csv(data.frame(gene = pos_genes,
+                           loading = gene_loadings[pos_genes, var_1],
+                           direction = "positive",
+                           PC = paste0("PC", var_1)),
+                sprintf("top_%d_positive_genes_PC%d.csv", K, var_1), row.names = FALSE)
+      
+      write.csv(data.frame(gene = neg_genes,
+                           loading = gene_loadings[neg_genes, var_1],
+                           direction = "negative",
+                           PC = paste0("PC", var_1)),
+                sprintf("top_%d_negative_genes_PC%d.csv", K, var_1), row.names = FALSE)
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      ## UNSUPERVISED CLUSTERING & HEATMAPS -------
+      
+      ## 1) Fallback (only if vst_1/vst_mat don't exist) 
+      if (!exists("vst_1")) {
+        message("vst_1 not found, computing VST from dds_1...")
+        stopifnot(exists("dds_1"))
+        vst_1 <- vst(dds_1)
+      }
+      if (!exists("vst_mat")) vst_mat <- assay(vst_1)   # genes x samples
+      # assay(vst1) → numeric matrix with rows = genes, cols = samples
+      
+      
+      ## 2) SAMPLE–SAMPLE CLUSTERING → matriz de correlaciones entre muestras
+      
+      # Use Pearson correlation between samples (robust for RNA-seq after VST)
+      cors <- cor(zmat, method = "pearson")     # samples x samples
+      ann <- data.frame(Grupo = coldata$grupo)
+      # Prepares sample annotations (here just time), to color the heatmap margins
+      rownames(ann) <- rownames(coldata)
+      
+      
+      
+      ## 3) Heatmap of correlations sample -sample
+      pheatmap(cors,
+               annotation_col = ann,
+               annotation_row = ann,
+               color = colorRampPalette(c("blue", "white", "red"))(100),
+               clustering_distance_rows = "correlation",
+               clustering_distance_cols = "correlation",             #ASK WHY NOT EUCLIDEAN
+               clustering_method = "average",         #ASK WHY NOT WARD.D2
+               display_numbers  = FALSE,
+               main = "Sample-to-sample correlation ")
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      ### LATER CHECK DE DENDOGRAM ----------
+      
+      
+      
+      
+      
+      
+      
+      ## HEATMAP – TOP VARIABLE GENES -------------
+      
+      # Select top N most variable genes across samples (after VST)
+      rv <- rowVars(zmat)  # varianza por gen
+      ntop <- 500          # número de genes a graficar
+      sel_genes <- order(rv, decreasing = TRUE)[1:ntop]
+      zmat_var <- zmat[sel_genes, ]
+      
+      # Heatmap (scale by row = z-score per gene)
+      pheatmap(zmat_var,
+               scale = "row",  # normaliza por gen (z-score)
+               show_rownames = FALSE,
+               show_colnames = TRUE,
+               clustering_distance_rows = "euclidean",
+               clustering_distance_cols = "correlation",
+               clustering_method = "ward.D2",
+               annotation_col = ann,
+               color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(255),
+               main = sprintf("Top %d variable genes (unsupervised clustering)", ntop))
+      
+      ## SAVE TO FILES -
+      # pdf("sample_correlation_heatmap.pdf", width = 7, height = 6); <repeat heatmap A>; dev.off()
+      # pdf("top_variable_genes_heatmap.pdf", width = 8, height = 8); <repeat heatmap B>; dev.off()
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      ## DEGs with DESeq (Wald test) ----
+      # Requisitos previos esperados:
+      # - 'dds_1' existe y contiene counts filtrados (FPM > 1 regla de prevalencia)
+      # - 'coldata' con la columna 'grupo' (levels = A, B, Control)
+      # - 'counts_filt' y 'vst_mat' ya construidos 
+      
+      # Checkpoints de sanidad
+      stopifnot(exists("dds_1"), inherits(dds_1, "DESeqDataSet"))
+      stopifnot(exists("coldata"), is.data.frame(coldata))
+      stopifnot("grupo" %in% colnames(coldata))
+      stopifnot(all(levels(coldata$grupo) == c("A","B","Control")))  # asegura orden de niveles
+      
+      # Simple warning útil por bajo n (A=2, B=4, Control=1)
+      ns <- table(coldata$grupo)
+      message(sprintf("N por grupo: A=%d, B=%d, Control=%d", ns["A"], ns["B"], ns["Control"]))
+      if (any(ns < 2)) {
+        warning("Hay grupos con <2 réplicas. Los p-values serán frágiles; prioriza tamaños de efecto (log2FC).")
+      }
+      
+      # Modelo y ajuste (Wald por defecto) 
+      design(dds_1) <- ~ grupo
+      dds_1 <- DESeq(dds_1)  # test='Wald' por defecto
+      
+      # Definición de contrastes 
+      contrasts <- list(
+        A_vs_B        = c("grupo","A","B"),
+        Control_vs_B  = c("grupo","Control","B"),
+        Control_vs_A  = c("grupo","Control","A")
+      )
+      
+      # Obtención de resultados por contraste 
+      res_list <- lapply(contrasts, function(ct) {
+        out <- results(dds_1, contrast = ct)
+        # Limpia NA de FDR a 1 (trata NA como no-significativo)
+        out$padj[is.na(out$padj)] <- 1
+        out
+      })
+      
+      # (Opcional) Shrink de log2FC para efectos más estables en volcano/rankings:
+      # library(apeglm)
+      # res_list <- list(
+      #   A_vs_B       = lfcShrink(dds_1, contrast = contrasts$A_vs_B,       type = "apeglm"),
+      #   Control_vs_B = lfcShrink(dds_1, contrast = contrasts$Control_vs_B, type = "apeglm"),
+      #   Control_vs_A = lfcShrink(dds_1, contrast = contrasts$Control_vs_A, type = "apeglm")
+      # )
+      # res_list <- lapply(res_list, function(r){ r$padj[is.na(r$padj)] <- 1; r })
+      
+      # Resumen rápido (conteos, up/down) 
+      alpha <- 0.01
+      deg_masks <- lapply(res_list, function(r) r$padj < alpha)
+      
+      quick_summary <- function(res, name, alpha = 0.01) {
+        tab <- as.data.frame(res)
+        tab$gene <- rownames(tab)
+        sig <- tab$padj < alpha
+        up  <- sig & tab$log2FoldChange >  0
+        dn  <- sig & tab$log2FoldChange <  0
+        cat(sprintf("\n[%s] FDR<%.2g: %d genes (up=%d, down=%d)\n",
+                    name, alpha, sum(sig), sum(up), sum(dn)))
+        # Top 10 por FDR
+        ord <- order(tab$padj, tab$pvalue, na.last = TRUE)
+        top10 <- tab[ord, c("gene","log2FoldChange","lfcSE","stat","pvalue","padj")][1:min(10, nrow(tab)), ]
+        print(top10)
+      }
+      
+      quick_summary(res_list$A_vs_B,       "A_vs_B",       alpha)
+      quick_summary(res_list$Control_vs_B, "Control_vs_B", alpha)
+      quick_summary(res_list$Control_vs_A, "Control_vs_A", alpha)
+      
+      # Guardado de tablas (completo y significativos) =====
+      outdir <- "out/cluster_24h/DEGs"
+      dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+      
+      save_tables <- function(res, name, outdir, alpha = 0.01) {
+        # asegurar carpeta
+        dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+        
+        # sufijo seguro para Windows (sin < > : " / \ | ? * )
+        alpha_str <- format(alpha, scientific = FALSE, trim = TRUE)
+        alpha_str <- gsub("\\.", "p", alpha_str)        # 0.01 -> 0p01
+        safe_tag  <- paste0("FDR_lt_", alpha_str)       # "FDR_lt_0p01"
+        
+        tab <- as.data.frame(res)
+        tab$gene <- rownames(tab)
+        tab <- tab[order(tab$padj, tab$pvalue, na.last = TRUE), ]
+        sig <- tab$padj < alpha
+        
+        # 1) Completo
+        write.csv(tab,
+                  file = file.path(outdir, sprintf("DEG_%s_all.csv", name)),
+                  row.names = FALSE)
+        
+        # 2) Solo significativos (nombre seguro)
+        write.csv(tab[sig, ],
+                  file = file.path(outdir, sprintf("DEG_%s_sig_%s.csv", name, safe_tag)),
+                  row.names = FALSE)
+        
+        # 3) Listas de genes (nombres seguros)
+        write.table(tab$gene,
+                    file = file.path(outdir, sprintf("genes_%s_all.txt",  name)),
+                    quote = FALSE, row.names = FALSE, col.names = FALSE)
+        write.table(tab$gene[sig],
+                    file = file.path(outdir, sprintf("genes_%s_sig_%s.txt", name, safe_tag)),
+                    quote = FALSE, row.names = FALSE, col.names = FALSE)
+        
+        # 4) Volcano-ready
+        volc <- tab[, c("gene","log2FoldChange","pvalue","padj")]
+        names(volc) <- c("gene","log2FC","pval","FDR")
+        write.csv(volc,
+                  file = file.path(outdir, sprintf("volcano_%s.csv", name)),
+                  row.names = FALSE)
+      }
+      
+      
+      save_tables(res_list$A_vs_B,        "A_vs_B",        outdir, alpha)
+      save_tables(res_list$Control_vs_B,  "Control_vs_B",  outdir, alpha)
+      save_tables(res_list$Control_vs_A,  "Control_vs_A",  outdir, alpha)
+      
+      # Variables que  quedan listas para el siguiente bloque 
+      # - res_list         : lista DESeqResults por contraste
+      # - deg_masks        : lista de máscaras lógicas (FDR<alpha) por contraste
+      # - alpha            : FDR usado
+      # - dds_1            : objeto DESeqDataSet ajustado (para fpm(), etc.)
+      # (A partir de aquí seguiríamos con "Transform DEGs for pattern discovery")
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      ## Transform DEGs for pattern discovery — per contrast ----
+      
+      # Lo que ya tenemos:
+      # - dds_1: DESeqDataSet ya ajustado (design ~ grupo)
+      # - res_list: lista DESeqResults por contraste (A_vs_B, Control_vs_B, Control_vs_A)
+      # - deg_masks: lista lógica por contraste con (padj < alpha)
+      # - coldata: data.frame con rownames = muestras y columna 'grupo'
+      # - alpha: FDR usado para definir "significativos"
+      
+      stopifnot(exists("dds_1"), exists("res_list"), exists("deg_masks"), exists("coldata"))
+      
+      # 1) Normalizados por size factors (tipo CPM/FPM de DESeq2)
+      fpm_norm <- fpm(dds_1)  # genes x muestras
+      
+      # 2) Carpeta de salida
+      outdir_mat <- "out/cluster_24h/DEG_matrices_by_contrast"
+      dir.create(outdir_mat, recursive = TRUE, showWarnings = FALSE)
+      
+      # 3) Función auxiliar: construye matrices y guarda
+      build_and_save_mats <- function(mask, name, fpm_mat, coldata, outdir) {
+        # a) Subset de genes significativos para este contraste
+        if (!any(mask)) {
+          warning(sprintf("[%s] No hay genes significativos @FDR<%.2g. Omitiendo.", name, alpha))
+          return(invisible(NULL))
+        }
+        mat_fpm <- fpm_mat[mask, , drop = FALSE]         # FPM normalizado
+        # Chequeos
+        stopifnot(identical(colnames(mat_fpm), rownames(coldata)))
+        stopifnot(all(is.finite(as.matrix(mat_fpm))))
+        
+        # b) log2(+1)
+        mat_log2 <- log2(mat_fpm + 1)
+        
+        # c) z-score por gen (fila)
+        mat_z <- t(scale(t(mat_log2)))
+        stopifnot(all(is.finite(mat_z)))
+        
+        # d) Guardar a disco
+        write.csv(mat_fpm,  file = file.path(outdir, sprintf("DEGs_%s_FPMnorm.csv",  name)), row.names = TRUE)
+        write.csv(mat_log2, file = file.path(outdir, sprintf("DEGs_%s_log2p1.csv",   name)), row.names = TRUE)
+        write.csv(mat_z,    file = file.path(outdir, sprintf("DEGs_%s_zscore.csv",   name)), row.names = TRUE)
+        
+        # e) También exporta lista de genes (en orden tal como están)
+        write.table(rownames(mat_z),
+                    file = file.path(outdir, sprintf("genes_%s_sig.txt", name)),
+                    quote = FALSE, row.names = FALSE, col.names = FALSE)
+        
+        # f) Devuelve la matriz z-score por si la quieres usar al vuelo
+        invisible(mat_z)
+      }
+      
+      # 4) Ejecutar para cada contraste
+      cs_by_contrast <- list()
+      for (nm in names(deg_masks)) {
+        cs_by_contrast[[nm]] <- build_and_save_mats(
+          mask   = deg_masks[[nm]],
+          name   = nm,
+          fpm_mat= fpm_norm,
+          coldata= coldata,
+          outdir = outdir_mat
+        )
+      }
+      
+      # 5) Resumen rápido de cuántos genes quedaron por contraste
+      for (nm in names(cs_by_contrast)) {
+        m <- cs_by_contrast[[nm]]
+        cat(sprintf("[%s] Genes en matriz z-score: %s\n", nm,
+                    if (is.null(m)) "0 (sin significativos)" else nrow(m)))
+      }
+      
+      # Objetos que te quedan:
+      # - cs_by_contrast$A_vs_B        -> matriz genes×muestras (z-scores) para ese contraste
+      # - cs_by_contrast$Control_vs_B  -> idem
+      # - cs_by_contrast$Control_vs_A  -> idem
+      # Archivos guardados en out/cluster_24h/DEG_matrices_by_contrast/
 
 
 
@@ -1007,6 +1951,9 @@ Los csv no analicemos module archives "es priorizar"
 <img width="1919" height="1199" alt="image" src="https://github.com/user-attachments/assets/026de977-6b07-42a5-851b-ba6f25eba874" />
 
 eggnote es estadistica aplicada → Cualquier persona que use estadistica aplicada le puede llamar AI
+
+
+
 
 
 
