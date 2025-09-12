@@ -1778,14 +1778,14 @@ Nuestro archivo:
       BBB   <- "B"   # referencia
       CCC   <- "C"  # control
       #### AQUI SE CAMBIA ####
-      contr_1 <- BBB
+      contr_1 <- CCC
       contr_2 <- AAA
       
       
       samples_A <- c("H13","H14")
       samples_B <- c("H9","H10","H11","H12")
       samples_C <- c("H15")
-      keep_samples_1 <- c(samples_B, samples_A) #### AQUI SE CAMBIA ####
+      keep_samples_1 <- c(samples_C, samples_A) #### AQUI SE CAMBIA ####
       keep_samples_1
       
       # Subset columnas de acuerdo al contraste que queremos
@@ -1793,8 +1793,9 @@ Nuestro archivo:
       counts_1 <- counts 
       colnames(counts) # Quick peek
       colnames(counts_1) # Quick peek
-      stopifnot(all(keep_samples_1 %in% colnames(counts_1))) # Que sean las mismas
+      
       counts_1 <- counts_1[, keep_samples_1, drop = FALSE]  # THE IMPORTATN COUNTS
+      stopifnot(all(keep_samples_1 %in% colnames(counts_1))) # Que sean las mismas
       keep_samples_1 # Quick peek
       colnames(counts_1) # Quick peek
       
@@ -1804,8 +1805,8 @@ Nuestro archivo:
       grp_vec <- setNames(rep(NA_character_, length(keep_samples_1)), keep_samples_1)
       #### AQUI SE CAMBIA ####
       grp_vec[samples_A] <- "A"       # Comenta el nivel no utilizado
-      grp_vec[samples_B] <- "B"
-      #grp_vec[samples_C] <- "C"
+      #grp_vec[samples_B] <- "B"
+      grp_vec[samples_C] <- "C"
       
       grp_vec
       
@@ -1862,13 +1863,15 @@ Nuestro archivo:
       
       # --
         
+      
+      
       p.adj <- res$padj
       names(p.adj) <- rownames(mat.vst)
       p.adj[is.na(p.adj)] <- 1
       
       sum(p.adj < 0.05)
-      # [1] n_degs (se imprimirá el conteo real)
       
+      # [1] n_degs (se imprimirá el conteo real)
       
       
       
@@ -1878,6 +1881,20 @@ Nuestro archivo:
       log2  <- log(DEG.cpm + 1, 2)
       cs.log2 <- t(scale(t(log2)))   # z-score por gen (para heatmaps/SOM, etc.)
       
+      
+      
+      ### Print res as a table -----
+      res_df    <- as.data.frame(res)
+      head(res_df)
+      head(res)
+      
+      # contrastes están en contr_1 y contr_2
+      out_file <- paste0("DEG_gene_results_", contr_1, "_vs_", contr_2, ".csv")
+      
+      write.csv(res_df, file = out_file, row.names = TRUE )
+      
+      
+      getwd()
       
       ### Enriquecimiento  --------
       annotation <- read.delim("fullAnnotation.tsv.txt", stringsAsFactors = FALSE, row.names = 1)
@@ -1924,6 +1941,48 @@ Nuestro archivo:
       }
       
       results.FDR[[1]]
+      
+      
+      
+      
+      # DEGs for pattern discovery -----
+      
+      ## Transform DEGs for pattern discovery  ----
+      contr_1
+      contr_2
+      tag <- paste0(contr_2, "_vs_", contr_1)  # E.j. A_vs_C
+      
+      # 0) máscara (contraste) de DEGs por FDR
+      alpha <- 0.05
+      padj <- res$padj
+      padj[is.na(padj)] <- 1              # <- reemplaza NAs por 1 (no significativo)
+      deg_mask <- padj < alpha
+      
+      cat("N NAs en res$padj:", sum(is.na(res$padj)), "\n")
+      cat("DEGs @FDR<", alpha, ": ", sum(deg_mask), "\n", sep="")
+      
+      if (!any(deg_mask)) stop("No DEGs @ FDR<", alpha, " en ", tag)
+      
+      
+      # 1) FPM normalizados con los size factors de ESTE dds
+      fpm_norm <- fpm(dds)                      # genes x muestras
+      DEG_cpm  <- fpm_norm[deg_mask, , drop=FALSE]
+      cat("[", tag, "] DEG_cpm:", nrow(DEG_cpm), "genes x", ncol(DEG_cpm), "muestras\n")
+      
+      # 2) log2(+1)
+      log2_deg <- log2(DEG_cpm + 1)
+      
+      # 3) z-score por gen
+      cs.log2 <- t(scale(t(log2_deg)))
+      
+      # 4) checks
+      stopifnot(all(is.finite(cs.log2)))
+      stopifnot(identical(colnames(cs.log2), rownames(coldata_1)))
+      cat("z-score range: [", round(min(cs.log2),2), ", ", round(max(cs.log2),2), "]\n", sep="")
+      
+      # 5) guardar (opcional)
+      # write.csv(as.data.frame(DEG_cpm), file=paste0("DEGs_FPMnorm_", tag, ".csv"))
+      # write.csv(as.data.frame(cs.log2), file=paste0("DEGs_log2p1_zscore_", tag, ".csv"))
 
 
 
@@ -1941,6 +2000,13 @@ eggnote es estadistica aplicada → Cualquier persona que use estadistica aplica
 # Evidencia de que mi counts es el mismo counts del profesor
 <img width="1217" height="799" alt="image" src="https://github.com/user-attachments/assets/922679a8-4851-448b-8d06-7a8143b08b11" />
 
+
+
+Volcano plot con los padj 
+
+
+
+Diagrama de venn
 
 
 
