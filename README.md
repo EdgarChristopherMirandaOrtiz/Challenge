@@ -1277,8 +1277,10 @@ Nuestro archivo:
 <img width="716" height="606" alt="image" src="https://github.com/user-attachments/assets/b4506a52-bba1-4394-b91a-c98a2a33b2be" />
 
 
-## MAIN CONTRAST CODE
 
+## MAIN CONTRAST CODE
+      
+           
       # Coffea arabica challenge adressed by RNAseq under different types of mutagenesis at different levels of RUST infection
       
       # Packages ------
@@ -1305,10 +1307,10 @@ Nuestro archivo:
       head(rust_counts)
       
       
+      # DATA TREATMENT -----------
       
       
-      
-      # SIMPLE SHORT NAMES ----
+      ### SHORT NAMES ----
       counts <- rust_counts
       
       ## 1) Build simple names 
@@ -1338,9 +1340,7 @@ Nuestro archivo:
       
       
       
-      
-      
-      # Zero-count filter -----
+      ### Zero-count filter -----
       
       # Drop genes with zero counts across all samples
       counts <- counts[rowSums(counts) > 0, , drop = FALSE]
@@ -1348,15 +1348,14 @@ Nuestro archivo:
       
       
       
-      
-      
-      # Nuevo grouping -----
-      ### grupos A/B/Control ----
+      ### Grouping -------- 
+      # grupos A/B/Control
       
       # Nos quedamos solo con H9–H15 (excluye H16)
       keep_samples <- c("H9","H10","H11","H12","H13","H14","H15")
       stopifnot(all(keep_samples %in% colnames(counts)))
-      counts <- counts[, keep_samples, drop = FALSE]
+      counts <- counts[, keep_samples, drop = FALSE]                 #Último movimiento a COUNTS
+      
       
       # Etiquetado de grupos:
       #  A = alta susceptibilidad → H13, H14
@@ -1378,11 +1377,7 @@ Nuestro archivo:
       
       
       
-      
-      
-      
-      
-      ## FPM screen ----
+      ### FPM screen ----
       
       # DESeq2 necesita counts enteros
       dds_raw <- DESeqDataSetFromMatrix(
@@ -1422,30 +1417,26 @@ Nuestro archivo:
       
       
       
-      
-      
-      
-      ## Size-factor normalization (DESeq2) ------
+      ### Size-factor normalization (DESeq2) ------
       dds_1 <- estimateSizeFactors(dds_1)      # median-of-ratios
       sizeFactors(dds_1)
       sizeFactors(dds_1)[1:5]     # Quick peek
       
       
       
-      
-      
-      ## Variance Stabilizing Transform (VST) -------
+      ### VST →Variance Stabilizing Transform (VST) -------
       vst_1   <- vst(dds_1)
       vst_mat <- assay(vst_1)                  # genes x samples
       head(vst_mat)
       
       
+      ### FPM genes*samples ---------  
+      fpm_norm <- fpm(dds_1)   # genes x muestras
+      head(fpm_norm)
       
       
       
-      
-      
-      ## Gene-wise z-score ----
+      ### Gene-wise z-score ----
       zmat <- t(scale(t(vst_mat)))
       
       # Now our columns are H9 to H15
@@ -1457,9 +1448,9 @@ Nuestro archivo:
       
       
       
+      # PCA'S -----------------
       
-      
-      ## PCA on samples (using prcomp) --------
+      ### pre-PCA on samples (using prcomp) --------
       
       # We already z-scored by gene, so no extra scaling here.
       # zmat viene de VST + z-score (genes x muestras)
@@ -1468,22 +1459,14 @@ Nuestro archivo:
       
       
       
-      
-      # Colors and legend (robust) ----
+      ### Colors and legend (robust) ----
       pal_grupo <- c(A = "#e41a1c", B = "#377eb8", Control = "#4daf4a")
       col_grupo <- pal_grupo[as.character(coldata$grupo)]
       leg_labs  <- levels(coldata$grupo)
       
       
       
-      
-      
-      
-      
-      
-      
-      
-      ## PCA plots -----------
+      ### PCA plots -----------
       
       ## 1) Pick the PCs you want to plot
       var_1 <- 1
@@ -1635,10 +1618,7 @@ Nuestro archivo:
       
       
       
-      
-      
-      
-      ## UNSUPERVISED CLUSTERING & HEATMAPS -------
+      #CLUSTERING & HEATMAPS -------
       
       ## 1) Fallback (only if vst_1/vst_mat don't exist) 
       if (!exists("vst_1")) {
@@ -1650,6 +1630,8 @@ Nuestro archivo:
       # assay(vst1) → numeric matrix with rows = genes, cols = samples
       
       
+      ### Heatmap sample sample ---------
+      
       ## 2) SAMPLE–SAMPLE CLUSTERING → matriz de correlaciones entre muestras
       
       # Use Pearson correlation between samples (robust for RNA-seq after VST)
@@ -1657,7 +1639,6 @@ Nuestro archivo:
       ann <- data.frame(Grupo = coldata$grupo)
       # Prepares sample annotations (here just time), to color the heatmap margins
       rownames(ann) <- rownames(coldata)
-      
       
       
       ## 3) Heatmap of correlations sample -sample
@@ -1673,22 +1654,7 @@ Nuestro archivo:
       
       
       
-      
-      
-      
-      
-      
-      
-      
-      ### LATER CHECK DE DENDOGRAM ----------
-      
-      
-      
-      
-      
-      
-      
-      ## HEATMAP – TOP VARIABLE GENES -------------
+      ## Heatmap top genes -------------
       
       # Select top N most variable genes across samples (after VST)
       rv <- rowVars(zmat)  # varianza por gen
@@ -1719,229 +1685,245 @@ Nuestro archivo:
       
       
       
+      # DEGs & DOCUMENTS ----------
+      
+      ## 1) Counts se encuentra en ### Zero-count filter 
+      
+      
+      ### EDIT 1) Parámetros del par y subconjunto de muestras
+      
+      AAA <- "A"   # numerador del log2FC (A vs B)
+      BBB   <- "B"   # referencia
+      CCC   <- "C"  # control
+      #### AQUI SE CAMBIA ####
+      contr_1 <- AAA
+      contr_2 <- CCC
+      
+      
+      samples_A <- c("H13","H14")
+      samples_B <- c("H9","H10","H11","H12")
+      samples_C <- c("H15")
+      keep_samples_1 <- c(samples_A, samples_C) #### AQUI SE CAMBIA ####
+      keep_samples_1
+      
+      # Subset columnas de acuerdo al contraste que queremos
+      stopifnot(all(c(samples_B,  samples_A, samples_C) %in% colnames(counts))) # Corroboramos que nuestro documento tenga las mismas muestras que nuestros clusters
+      counts_1 <- counts 
+      colnames(counts) # Quick peek
+      colnames(counts_1) # Quick peek
+      stopifnot(all(keep_samples_1 %in% colnames(counts_1))) # Que sean las mismas
+      counts_1 <- counts_1[, keep_samples_1, drop = FALSE]  # THE IMPORTATN COUNTS
+      keep_samples_1 # Quick peek
+      colnames(counts_1) # Quick peek
+      
+      
+      # coldata_1 factor y nivel
+      ### EDIT 2) colData con factor Group (A/B) y niveles (contr_1, contr_2)
+      grp_vec <- setNames(rep(NA_character_, length(keep_samples_1)), keep_samples_1)
+      #### AQUI SE CAMBIA ####
+      grp_vec[samples_A] <- "A"       # Comenta el nivel no utilizado
+      #grp_vec[samples_B] <- "B"
+      grp_vec[samples_C] <- "C"
+      
+      grp_vec
+      
+      
+      coldata_1 <- data.frame(Group = factor(grp_vec, levels = c(contr_1, contr_2)))
+      rownames(coldata_1) <- names(grp_vec)
+      
+      # coldata (Dr. carlos) = coldata_1
+      print(coldata_1)
       
       
       
       
+      #### dds en contrastes --------
+      
+      ### EDIT 3) dds con diseño ~ Group (dos niveles)
+      dds <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts_1)),
+                                    colData = coldata_1,
+                                    design = ~ Group)
+      head(dds)
+      
+      
+      # FPM-like (para referencia/consistencia con el flujo del profe)
+      cpm <- fpm(dds, robust = FALSE)
+      head(cpm)
+      
+      # VST “blind” 
+      vst <- vst(dds, blind = TRUE)
+      head(vst)
+      
+      
+      
+      # Matrices derivadas 
+      std.mat <- t(scale(t(log(fpm(dds) + 1, 2))))  # matriz z-score desde log2(FPM+1)
+      head(std.mat)
+      mat.vst <- assay(vst)
+      head(mat.vst)
+      mat.cpm <- fpm(dds)
+      head(mat.cpm)
+      
+
+### DEGs & DOCUMENTS
+
+      # DEGs & DOCUMENTS ----------
+      
+      ## 1) Counts se encuentra en ### Zero-count filter 
+      
+      
+      ### EDIT 1) Parámetros del par y subconjunto de muestras
+      
+      AAA <- "A"   # numerador del log2FC (A vs B)
+      BBB   <- "B"   # referencia
+      CCC   <- "C"  # control
+      #### AQUI SE CAMBIA ####
+      contr_1 <- BBB
+      contr_2 <- AAA
+      
+      
+      samples_A <- c("H13","H14")
+      samples_B <- c("H9","H10","H11","H12")
+      samples_C <- c("H15")
+      keep_samples_1 <- c(samples_B, samples_A) #### AQUI SE CAMBIA ####
+      keep_samples_1
+      
+      # Subset columnas de acuerdo al contraste que queremos
+      stopifnot(all(c(samples_B,  samples_A, samples_C) %in% colnames(counts))) # Corroboramos que nuestro documento tenga las mismas muestras que nuestros clusters
+      counts_1 <- counts 
+      colnames(counts) # Quick peek
+      colnames(counts_1) # Quick peek
+      stopifnot(all(keep_samples_1 %in% colnames(counts_1))) # Que sean las mismas
+      counts_1 <- counts_1[, keep_samples_1, drop = FALSE]  # THE IMPORTATN COUNTS
+      keep_samples_1 # Quick peek
+      colnames(counts_1) # Quick peek
+      
+      
+      # coldata_1 factor y nivel
+      ### EDIT 2) colData con factor Group (A/B) y niveles (contr_1, contr_2)
+      grp_vec <- setNames(rep(NA_character_, length(keep_samples_1)), keep_samples_1)
+      #### AQUI SE CAMBIA ####
+      grp_vec[samples_A] <- "A"       # Comenta el nivel no utilizado
+      grp_vec[samples_B] <- "B"
+      #grp_vec[samples_C] <- "C"
+      
+      grp_vec
+      
+      
+      coldata_1 <- data.frame(Group = factor(grp_vec, levels = c(contr_1, contr_2)))
+      rownames(coldata_1) <- names(grp_vec)
+      
+      # coldata (Dr. carlos) = coldata_1
+      print(coldata_1)
       
       
       
       
+      #### dds en contrastes --------
       
-      ## DEGs with DESeq (Wald test) ----
-      # Requisitos previos esperados:
-      # - 'dds_1' existe y contiene counts filtrados (FPM > 1 regla de prevalencia)
-      # - 'coldata' con la columna 'grupo' (levels = A, B, Control)
-      # - 'counts_filt' y 'vst_mat' ya construidos 
+      ### EDIT 3) dds con diseño ~ Group (dos niveles)
+      dds <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts_1)),
+                                    colData = coldata_1,
+                                    design = ~ Group)
+      head(dds)
       
-      # Checkpoints de sanidad
-      stopifnot(exists("dds_1"), inherits(dds_1, "DESeqDataSet"))
-      stopifnot(exists("coldata"), is.data.frame(coldata))
-      stopifnot("grupo" %in% colnames(coldata))
-      stopifnot(all(levels(coldata$grupo) == c("A","B","Control")))  # asegura orden de niveles
       
-      # Simple warning útil por bajo n (A=2, B=4, Control=1)
-      ns <- table(coldata$grupo)
-      message(sprintf("N por grupo: A=%d, B=%d, Control=%d", ns["A"], ns["B"], ns["Control"]))
-      if (any(ns < 2)) {
-        warning("Hay grupos con <2 réplicas. Los p-values serán frágiles; prioriza tamaños de efecto (log2FC).")
-      }
+      # FPM-like (para referencia/consistencia con el flujo del profe)
+      cpm <- fpm(dds, robust = FALSE)
+      head(cpm)
       
-      # Modelo y ajuste (Wald por defecto) 
-      design(dds_1) <- ~ grupo
-      dds_1 <- DESeq(dds_1)  # test='Wald' por defecto
+      # VST “blind” 
+      vst <- vst(dds, blind = TRUE)
+      head(vst)
       
-      # Definición de contrastes 
-      contrasts <- list(
-        A_vs_B        = c("grupo","A","B"),
-        Control_vs_B  = c("grupo","Control","B"),
-        Control_vs_A  = c("grupo","Control","A")
-      )
       
-      # Obtención de resultados por contraste 
-      res_list <- lapply(contrasts, function(ct) {
-        out <- results(dds_1, contrast = ct)
-        # Limpia NA de FDR a 1 (trata NA como no-significativo)
-        out$padj[is.na(out$padj)] <- 1
-        out
-      })
       
-      # (Opcional) Shrink de log2FC para efectos más estables en volcano/rankings:
-      # library(apeglm)
-      # res_list <- list(
-      #   A_vs_B       = lfcShrink(dds_1, contrast = contrasts$A_vs_B,       type = "apeglm"),
-      #   Control_vs_B = lfcShrink(dds_1, contrast = contrasts$Control_vs_B, type = "apeglm"),
-      #   Control_vs_A = lfcShrink(dds_1, contrast = contrasts$Control_vs_A, type = "apeglm")
-      # )
-      # res_list <- lapply(res_list, function(r){ r$padj[is.na(r$padj)] <- 1; r })
+      # Matrices derivadas 
+      std.mat <- t(scale(t(log(fpm(dds) + 1, 2))))  # matriz z-score desde log2(FPM+1)
+      head(std.mat)
+      mat.vst <- assay(vst)
+      head(mat.vst)
+      mat.cpm <- fpm(dds)
+      head(mat.cpm)
       
-      # Resumen rápido (conteos, up/down) 
-      alpha <- 0.01
-      deg_masks <- lapply(res_list, function(r) r$padj < alpha)
       
-      quick_summary <- function(res, name, alpha = 0.01) {
-        tab <- as.data.frame(res)
-        tab$gene <- rownames(tab)
-        sig <- tab$padj < alpha
-        up  <- sig & tab$log2FoldChange >  0
-        dn  <- sig & tab$log2FoldChange <  0
-        cat(sprintf("\n[%s] FDR<%.2g: %d genes (up=%d, down=%d)\n",
-                    name, alpha, sum(sig), sum(up), sum(dn)))
-        # Top 10 por FDR
-        ord <- order(tab$padj, tab$pvalue, na.last = TRUE)
-        top10 <- tab[ord, c("gene","log2FoldChange","lfcSE","stat","pvalue","padj")][1:min(10, nrow(tab)), ]
-        print(top10)
-      }
       
-      quick_summary(res_list$A_vs_B,       "A_vs_B",       alpha)
-      quick_summary(res_list$Control_vs_B, "Control_vs_B", alpha)
-      quick_summary(res_list$Control_vs_A, "Control_vs_A", alpha)
+      ### LRT TEST ------
       
-      # Guardado de tablas (completo y significativos) =====
-      outdir <- "out/cluster_24h/DEGs"
-      dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+      ### EDIT 4) LRT (full ~ Group vs reduced ~ 1)
       
-      save_tables <- function(res, name, outdir, alpha = 0.01) {
-        # asegurar carpeta
-        dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+      # TEST LRT, comentar si WALD
+      #dds <- DESeq(dds, test = "LRT", reduced = ~ 1)
+      #res <- results(dds, alpha = 0.05)  # p-ajus y log2FC = contr_2 vs contr_1 (por niveles de Group)
+      
+      # TEST WALD, comentar si LRT
+      dds <- DESeq(dds)  # Wald por defecto
+      res <- results(dds, contrast = c("Group", contr_2, contr_1), alpha = 0.05)
+      
+      # --
         
-        # sufijo seguro para Windows (sin < > : " / \ | ? * )
-        alpha_str <- format(alpha, scientific = FALSE, trim = TRUE)
-        alpha_str <- gsub("\\.", "p", alpha_str)        # 0.01 -> 0p01
-        safe_tag  <- paste0("FDR_lt_", alpha_str)       # "FDR_lt_0p01"
+      p.adj <- res$padj
+      names(p.adj) <- rownames(mat.vst)
+      p.adj[is.na(p.adj)] <- 1
+      
+      sum(p.adj < 0.05)
+      # [1] n_degs (se imprimirá el conteo real)
+      
+      
+      
+      
+      # Selección de DEGs como en el flujo original (desde mat.cpm)
+      DEG.cpm <- mat.cpm[(p.adj < 0.05), , drop = FALSE]
+      
+      log2  <- log(DEG.cpm + 1, 2)
+      cs.log2 <- t(scale(t(log2)))   # z-score por gen (para heatmaps/SOM, etc.)
+      
+      
+      ### Enriquecimiento  --------
+      annotation <- read.delim("fullAnnotation.tsv.txt", stringsAsFactors = FALSE, row.names = 1)
+      
+      enriched.FDR <- enriched.p <- vector("list", 2)
+      names(enriched.p) <- names(enriched.FDR) <- c("KEGG_Pathway", "KEGG_Module")
+      
+      for (i in 1:2) {
+        population <- table(unlist(strsplit(annotation[rownames(annotation) %in% rownames(std.mat),
+                                                       names(enriched.p)[[i]]], split = ",")))
+        results.p <- array(1, length(population)); names(results.p) <- names(population)
+        results.FDR <- results.p
+        hit <- population * 0
         
-        tab <- as.data.frame(res)
-        tab$gene <- rownames(tab)
-        tab <- tab[order(tab$padj, tab$pvalue, na.last = TRUE), ]
-        sig <- tab$padj < alpha
+        aux <- table(unlist(strsplit(annotation[rownames(annotation) %in% rownames(DEG.cpm),
+                                                names(enriched.p)[[i]]], split = ",")))
+        hit[names(aux)] <- aux
         
-        # 1) Completo
-        write.csv(tab,
-                  file = file.path(outdir, sprintf("DEG_%s_all.csv", name)),
-                  row.names = FALSE)
-        
-        # 2) Solo significativos (nombre seguro)
-        write.csv(tab[sig, ],
-                  file = file.path(outdir, sprintf("DEG_%s_sig_%s.csv", name, safe_tag)),
-                  row.names = FALSE)
-        
-        # 3) Listas de genes (nombres seguros)
-        write.table(tab$gene,
-                    file = file.path(outdir, sprintf("genes_%s_all.txt",  name)),
-                    quote = FALSE, row.names = FALSE, col.names = FALSE)
-        write.table(tab$gene[sig],
-                    file = file.path(outdir, sprintf("genes_%s_sig_%s.txt", name, safe_tag)),
-                    quote = FALSE, row.names = FALSE, col.names = FALSE)
-        
-        # 4) Volcano-ready
-        volc <- tab[, c("gene","log2FoldChange","pvalue","padj")]
-        names(volc) <- c("gene","log2FC","pval","FDR")
-        write.csv(volc,
-                  file = file.path(outdir, sprintf("volcano_%s.csv", name)),
-                  row.names = FALSE)
-      }
-      
-      
-      save_tables(res_list$A_vs_B,        "A_vs_B",        outdir, alpha)
-      save_tables(res_list$Control_vs_B,  "Control_vs_B",  outdir, alpha)
-      save_tables(res_list$Control_vs_A,  "Control_vs_A",  outdir, alpha)
-      
-      # Variables que  quedan listas para el siguiente bloque 
-      # - res_list         : lista DESeqResults por contraste
-      # - deg_masks        : lista de máscaras lógicas (FDR<alpha) por contraste
-      # - alpha            : FDR usado
-      # - dds_1            : objeto DESeqDataSet ajustado (para fpm(), etc.)
-      # (A partir de aquí seguiríamos con "Transform DEGs for pattern discovery")
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      
-      ## Transform DEGs for pattern discovery — per contrast ----
-      
-      # Lo que ya tenemos:
-      # - dds_1: DESeqDataSet ya ajustado (design ~ grupo)
-      # - res_list: lista DESeqResults por contraste (A_vs_B, Control_vs_B, Control_vs_A)
-      # - deg_masks: lista lógica por contraste con (padj < alpha)
-      # - coldata: data.frame con rownames = muestras y columna 'grupo'
-      # - alpha: FDR usado para definir "significativos"
-      
-      stopifnot(exists("dds_1"), exists("res_list"), exists("deg_masks"), exists("coldata"))
-      
-      # 1) Normalizados por size factors (tipo CPM/FPM de DESeq2)
-      fpm_norm <- fpm(dds_1)  # genes x muestras
-      
-      # 2) Carpeta de salida
-      outdir_mat <- "out/cluster_24h/DEG_matrices_by_contrast"
-      dir.create(outdir_mat, recursive = TRUE, showWarnings = FALSE)
-      
-      # 3) Función auxiliar: construye matrices y guarda
-      build_and_save_mats <- function(mask, name, fpm_mat, coldata, outdir) {
-        # a) Subset de genes significativos para este contraste
-        if (!any(mask)) {
-          warning(sprintf("[%s] No hay genes significativos @FDR<%.2g. Omitiendo.", name, alpha))
-          return(invisible(NULL))
+        for (k in names(aux)) {
+          # Over-representation: phyper(hitInSample-1, hitInPopulation, failInPopulation, sampleSize, lower.tail=FALSE)
+          results.p[k] <- phyper(hit[k] - 1, population[k], sum(population) - population[k], sum(hit), lower.tail = FALSE)
         }
-        mat_fpm <- fpm_mat[mask, , drop = FALSE]         # FPM normalizado
-        # Chequeos
-        stopifnot(identical(colnames(mat_fpm), rownames(coldata)))
-        stopifnot(all(is.finite(as.matrix(mat_fpm))))
         
-        # b) log2(+1)
-        mat_log2 <- log2(mat_fpm + 1)
+        results.FDR <- p.adjust(results.p, method = "fdr")
+        enriched.p[[i]] <- results.p
+        enriched.FDR[[i]] <- results.FDR
         
-        # c) z-score por gen (fila)
-        mat_z <- t(scale(t(mat_log2)))
-        stopifnot(all(is.finite(mat_z)))
+        write.table(t(t(results.FDR)),
+                    file = paste0("Enrichment_FDR_", names(enriched.p)[[i]], ".tsv"),
+                    sep = "\t")
         
-        # d) Guardar a disco
-        write.csv(mat_fpm,  file = file.path(outdir, sprintf("DEGs_%s_FPMnorm.csv",  name)), row.names = TRUE)
-        write.csv(mat_log2, file = file.path(outdir, sprintf("DEGs_%s_log2p1.csv",   name)), row.names = TRUE)
-        write.csv(mat_z,    file = file.path(outdir, sprintf("DEGs_%s_zscore.csv",   name)), row.names = TRUE)
-        
-        # e) También exporta lista de genes (en orden tal como están)
-        write.table(rownames(mat_z),
-                    file = file.path(outdir, sprintf("genes_%s_sig.txt", name)),
-                    quote = FALSE, row.names = FALSE, col.names = FALSE)
-        
-        # f) Devuelve la matriz z-score por si la quieres usar al vuelo
-        invisible(mat_z)
+        for (j in names(results.FDR)[results.FDR < 0.05]) {
+          enriched.current <- intersect(
+            rownames(annotation)[grep(j, annotation[, names(enriched.p)[[i]]])],
+            rownames(DEG.cpm)
+          )
+          write.table(
+            cbind(DEG.cpm[enriched.current, ],
+                  annotation[enriched.current, grep("KEGG", colnames(annotation))]),
+            file = paste0("Enrichment_FDR_", names(enriched.p)[[i]], "_", j, ".tsv"),
+            sep  = "\t"
+          )
+        }
       }
       
-      # 4) Ejecutar para cada contraste
-      cs_by_contrast <- list()
-      for (nm in names(deg_masks)) {
-        cs_by_contrast[[nm]] <- build_and_save_mats(
-          mask   = deg_masks[[nm]],
-          name   = nm,
-          fpm_mat= fpm_norm,
-          coldata= coldata,
-          outdir = outdir_mat
-        )
-      }
-      
-      # 5) Resumen rápido de cuántos genes quedaron por contraste
-      for (nm in names(cs_by_contrast)) {
-        m <- cs_by_contrast[[nm]]
-        cat(sprintf("[%s] Genes en matriz z-score: %s\n", nm,
-                    if (is.null(m)) "0 (sin significativos)" else nrow(m)))
-      }
-      
-      # Objetos que te quedan:
-      # - cs_by_contrast$A_vs_B        -> matriz genes×muestras (z-scores) para ese contraste
-      # - cs_by_contrast$Control_vs_B  -> idem
-      # - cs_by_contrast$Control_vs_A  -> idem
-      # Archivos guardados en out/cluster_24h/DEG_matrices_by_contrast/
+      results.FDR[[1]]
 
 
 
@@ -1952,6 +1934,12 @@ Los csv no analicemos module archives "es priorizar"
 
 eggnote es estadistica aplicada → Cualquier persona que use estadistica aplicada le puede llamar AI
 
+
+####################################3
+#################################
+
+# Evidencia de que mi counts es el mismo counts del profesor
+<img width="1217" height="799" alt="image" src="https://github.com/user-attachments/assets/922679a8-4851-448b-8d06-7a8143b08b11" />
 
 
 
