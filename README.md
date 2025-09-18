@@ -1277,11 +1277,10 @@ Nuestro archivo:
 <img width="716" height="606" alt="image" src="https://github.com/user-attachments/assets/b4506a52-bba1-4394-b91a-c98a2a33b2be" />
 
 
-
-## MAIN CONTRAST CODE
       
-           
-      # Coffea arabica challenge adressed by RNAseq under different types of mutagenesis at different levels of RUST infection
+      ## MAIN CONTRAST CODE
+            
+         # Coffea arabica challenge adressed by RNAseq under different types of mutagenesis at different levels of RUST infection
       
       # Packages ------
       
@@ -1295,11 +1294,18 @@ Nuestro archivo:
       library(DESeq2);	      #Normalization and everything related to that
       library(RColorBrewer)   #Color
       library(matrixStats)   # rowVars
+      library(dplyr)
+      library(tibble)
+      library(stringr)
+      library(readr)
+      library(ggvenn)
+      
+      
       
       
       # INPUT -----
-      url_rna_counts <- "https://raw.githubusercontent.com/jmvillalobos/RNAseq_curso2025/refs/heads/main/Cara_RNAc90_counts.txt"
-      #url_rna_counts <- "Cara_RNAc90_counts.txt"
+      #url_rna_counts <- "https://raw.githubusercontent.com/jmvillalobos/RNAseq_curso2025/refs/heads/main/Cara_RNAc90_counts.txt"
+      url_rna_counts <- "Cara_RNAc90_counts.txt"
       
       # MAIN RAW DATA 
       rust_counts <- read.table(url_rna_counts, header = TRUE, row.names = 1, sep = "\t", check.names = FALSE)
@@ -1356,6 +1362,7 @@ Nuestro archivo:
       stopifnot(all(keep_samples %in% colnames(counts)))
       counts <- counts[, keep_samples, drop = FALSE]                 #Último movimiento a COUNTS
       
+      counts_good <- counts
       
       # Etiquetado de grupos:
       #  A = alta susceptibilidad → H13, H14
@@ -1448,6 +1455,7 @@ Nuestro archivo:
       
       
       
+      
       # PCA'S -----------------
       
       ### pre-PCA on samples (using prcomp) --------
@@ -1460,7 +1468,8 @@ Nuestro archivo:
       
       
       ### Colors and legend (robust) ----
-      pal_grupo <- c(A = "#e41a1c", B = "#377eb8", Control = "#4daf4a")
+      pal_grupo <- c(A = "#fdac4f", B = "#a2593d", C = "#3d6863")
+      pall_grupo <- c(A = "#fdac4f", B = "#a2593d", Control = "#3d6863")
       col_grupo <- pal_grupo[as.character(coldata$grupo)]
       leg_labs  <- levels(coldata$grupo)
       
@@ -1518,7 +1527,7 @@ Nuestro archivo:
       
       # Step 4: ggplot
       ggplot(df_load, aes(x = PCx, y = PCy, color = abs(PCx))) +
-        geom_point(alpha = 0.4, size = 0.6, color = "#AF9AB2") +
+        geom_point(alpha = 0.4, size = 0.6, color = "gray80") +
         scale_color_viridis_c() +
         labs(
           title = sprintf("PCA – Genes ", var_1),
@@ -1574,9 +1583,9 @@ Nuestro archivo:
       df_load_top$group <- factor(df_load_top$group, levels = c("other","top_pos","top_neg"))
       
       # Colors (hex ok)
-      col_other <- "#AF9AB2"  
-      col_pos   <- "#f9665e"  # red
-      col_neg   <- "#799fcb"  # blue  
+      col_other <- "gray80"  
+      col_pos   <- "#75621d"  # red
+      col_neg   <- "#76244c"  # blue  
       
       
       ggplot(df_load_top, aes(PCx, PCy, color = group)) +
@@ -1645,7 +1654,7 @@ Nuestro archivo:
       pheatmap(cors,
                annotation_col = ann,
                annotation_row = ann,
-               color = colorRampPalette(c("blue", "white", "red"))(100),
+               color = colorRampPalette(c("#76244c", "#f7efe6", "#75621d"))(100),
                clustering_distance_rows = "correlation",
                clustering_distance_cols = "correlation",             #ASK WHY NOT EUCLIDEAN
                clustering_method = "average",         #ASK WHY NOT WARD.D2
@@ -1681,347 +1690,2636 @@ Nuestro archivo:
       
       
       
+      # --DEGs & DOCUMENTS ------------------------------------------------
       
+      # ENRIQ... log2FC (B/A) -------------------------------------------
+      # Corre "annotation"
       
-      
-      
-      # DEGs & DOCUMENTS ----------
-      
-      ## 1) Counts se encuentra en ### Zero-count filter 
-      
-      
-      ### EDIT 1) Parámetros del par y subconjunto de muestras
-      
-      AAA <- "A"   # numerador del log2FC (A vs B)
-      BBB   <- "B"   # referencia
+      #  Parámetros y subconjunto 
+      AAA <- "A"   
+      BBB   <- "B"   
       CCC   <- "C"  # control
-      #### AQUI SE CAMBIA ####
-      contr_1 <- AAA
-      contr_2 <- CCC
-      
-      
+      contr_1a <- AAA       # referencia (B)
+      contr_2a <- BBB       # numerador (A)
       samples_A <- c("H13","H14")
       samples_B <- c("H9","H10","H11","H12")
       samples_C <- c("H15")
-      keep_samples_1 <- c(samples_A, samples_C) #### AQUI SE CAMBIA ####
-      keep_samples_1
+      keep_samples_a <- c(samples_A, samples_B)
+      stopifnot(all(keep_samples_a %in% colnames(counts)))
       
-      # Subset columnas de acuerdo al contraste que queremos
-      stopifnot(all(c(samples_B,  samples_A, samples_C) %in% colnames(counts))) # Corroboramos que nuestro documento tenga las mismas muestras que nuestros clusters
-      counts_1 <- counts 
-      colnames(counts) # Quick peek
-      colnames(counts_1) # Quick peek
-      stopifnot(all(keep_samples_1 %in% colnames(counts_1))) # Que sean las mismas
-      counts_1 <- counts_1[, keep_samples_1, drop = FALSE]  # THE IMPORTATN COUNTS
-      keep_samples_1 # Quick peek
-      colnames(counts_1) # Quick peek
       
+      counts_a <- counts[, keep_samples_a, drop = FALSE]
       
-      # coldata_1 factor y nivel
-      ### EDIT 2) colData con factor Group (A/B) y niveles (contr_1, contr_2)
-      grp_vec <- setNames(rep(NA_character_, length(keep_samples_1)), keep_samples_1)
-      #### AQUI SE CAMBIA ####
-      grp_vec[samples_A] <- "A"       # Comenta el nivel no utilizado
-      #grp_vec[samples_B] <- "B"
-      grp_vec[samples_C] <- "C"
+      #  colData (niveles en orden ref→num) 
+      grp_vec_a <- setNames(rep(NA_character_, length(keep_samples_a)), keep_samples_a)
+      grp_vec_a[samples_A] <- "A"
+      grp_vec_a[samples_B] <- "B"
       
-      grp_vec
+      coldata_a <- data.frame(Group = factor(grp_vec_a, levels = c(contr_1a, contr_2a)))
+      rownames(coldata_a) <- names(grp_vec_a)
       
+      ### DESeq2: WALD -------
+      dds_a <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts_a)),
+                                      colData   = coldata_a,
+                                      design    = ~ Group)
+      dds_a <- dds_a[rowSums(counts(dds_a)) > 0, ]
+      dds_a <- DESeq(dds_a)
+      res_a <- results(dds_a, contrast = c("Group", contr_2a, contr_1a), alpha = 0.05)
+      resdf_a <- as.data.frame(res_a)
       
-      coldata_1 <- data.frame(Group = factor(grp_vec, levels = c(contr_1, contr_2)))
-      rownames(coldata_1) <- names(grp_vec)
+      # matrices derivadas (para enriquecimiento / heatmaps) 
+      fpm_a     <- fpm(dds_a)
+      vst_a     <- vst(dds_a, blind = TRUE)
+      std.mat_a <- t(scale(t(log2(fpm(dds_a) + 1))))   # z-score desde log2(FPM+1)
       
-      # coldata (Dr. carlos) = coldata_1
-      print(coldata_1)
+      # --- DEGs por padj 
+      padj_a <- res_a$padj; names(padj_a) <- rownames(res_a); padj_a[is.na(padj_a)] <- 1
+      DEG.cpm_a <- fpm_a[padj_a < 0.05, , drop = FALSE]
       
       
+      ### Exporta tabla ----------
+      res_sig_a <- subset(resdf_a, !is.na(padj) & padj < 0.05)
+      write.csv(res_sig_a, file = paste0("DEG_gene_results_", contr_2a, "_vs_", contr_1a, ".csv"),
+                row.names = TRUE)
       
-      
-      #### dds en contrastes --------
-      
-      ### EDIT 3) dds con diseño ~ Group (dos niveles)
-      dds <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts_1)),
-                                    colData = coldata_1,
-                                    design = ~ Group)
-      head(dds)
-      
-      
-      # FPM-like (para referencia/consistencia con el flujo del profe)
-      cpm <- fpm(dds, robust = FALSE)
-      head(cpm)
-      
-      # VST “blind” 
-      vst <- vst(dds, blind = TRUE)
-      head(vst)
-      
-      
-      
-      # Matrices derivadas 
-      std.mat <- t(scale(t(log(fpm(dds) + 1, 2))))  # matriz z-score desde log2(FPM+1)
-      head(std.mat)
-      mat.vst <- assay(vst)
-      head(mat.vst)
-      mat.cpm <- fpm(dds)
-      head(mat.cpm)
-      
-
-### DEGs & DOCUMENTS
-
-      # DEGs & DOCUMENTS ----------
-      
-      ## 1) Counts se encuentra en ### Zero-count filter 
-      
-      
-      ### EDIT 1) Parámetros del par y subconjunto de muestras
-      
-      AAA <- "A"   # numerador del log2FC (A vs B)
-      BBB   <- "B"   # referencia
-      CCC   <- "C"  # control
-      #### AQUI SE CAMBIA ####
-      contr_1 <- CCC
-      contr_2 <- AAA
-      
-      
-      samples_A <- c("H13","H14")
-      samples_B <- c("H9","H10","H11","H12")
-      samples_C <- c("H15")
-      keep_samples_1 <- c(samples_C, samples_A) #### AQUI SE CAMBIA ####
-      keep_samples_1
-      
-      # Subset columnas de acuerdo al contraste que queremos
-      stopifnot(all(c(samples_B,  samples_A, samples_C) %in% colnames(counts))) # Corroboramos que nuestro documento tenga las mismas muestras que nuestros clusters
-      counts_1 <- counts 
-      colnames(counts) # Quick peek
-      colnames(counts_1) # Quick peek
-      
-      counts_1 <- counts_1[, keep_samples_1, drop = FALSE]  # THE IMPORTATN COUNTS
-      stopifnot(all(keep_samples_1 %in% colnames(counts_1))) # Que sean las mismas
-      keep_samples_1 # Quick peek
-      colnames(counts_1) # Quick peek
-      
-      
-      # coldata_1 factor y nivel
-      ### EDIT 2) colData con factor Group (A/B) y niveles (contr_1, contr_2)
-      grp_vec <- setNames(rep(NA_character_, length(keep_samples_1)), keep_samples_1)
-      #### AQUI SE CAMBIA ####
-      grp_vec[samples_A] <- "A"       # Comenta el nivel no utilizado
-      #grp_vec[samples_B] <- "B"
-      grp_vec[samples_C] <- "C"
-      
-      grp_vec
-      
-      
-      coldata_1 <- data.frame(Group = factor(grp_vec, levels = c(contr_1, contr_2)))
-      rownames(coldata_1) <- names(grp_vec)
-      
-      # coldata (Dr. carlos) = coldata_1
-      print(coldata_1)
-      
-      
-      
-      
-      #### dds en contrastes --------
-      
-      ### EDIT 3) dds con diseño ~ Group (dos niveles)
-      dds <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts_1)),
-                                    colData = coldata_1,
-                                    design = ~ Group)
-      head(dds)
-      
-      
-      # FPM-like (para referencia/consistencia con el flujo del profe)
-      cpm <- fpm(dds, robust = FALSE)
-      head(cpm)
-      
-      # VST “blind” 
-      vst <- vst(dds, blind = TRUE)
-      head(vst)
-      
-      
-      
-      # Matrices derivadas 
-      std.mat <- t(scale(t(log(fpm(dds) + 1, 2))))  # matriz z-score desde log2(FPM+1)
-      head(std.mat)
-      mat.vst <- assay(vst)
-      head(mat.vst)
-      mat.cpm <- fpm(dds)
-      head(mat.cpm)
-      
-      
-      
-      ### LRT TEST ------
-      
-      ### EDIT 4) LRT (full ~ Group vs reduced ~ 1)
-      
-      # TEST LRT, comentar si WALD
-      #dds <- DESeq(dds, test = "LRT", reduced = ~ 1)
-      #res <- results(dds, alpha = 0.05)  # p-ajus y log2FC = contr_2 vs contr_1 (por niveles de Group)
-      
-      # TEST WALD, comentar si LRT
-      dds <- DESeq(dds)  # Wald por defecto
-      res <- results(dds, contrast = c("Group", contr_2, contr_1), alpha = 0.05)
-      
-      # --
-        
-      
-      
-      p.adj <- res$padj
-      names(p.adj) <- rownames(mat.vst)
-      p.adj[is.na(p.adj)] <- 1
-      
-      sum(p.adj < 0.05)
-      
-      # [1] n_degs (se imprimirá el conteo real)
-      
-      
-      
-      # Selección de DEGs como en el flujo original (desde mat.cpm)
-      DEG.cpm <- mat.cpm[(p.adj < 0.05), , drop = FALSE]
-      
-      log2  <- log(DEG.cpm + 1, 2)
-      cs.log2 <- t(scale(t(log2)))   # z-score por gen (para heatmaps/SOM, etc.)
-      
-      
-      
-      ### Print res as a table -----
-      res_df    <- as.data.frame(res)
-      head(res_df)
-      head(res)
-      
-      # contrastes están en contr_1 y contr_2
-      out_file <- paste0("DEG_gene_results_", contr_1, "_vs_", contr_2, ".csv")
-      
-      write.csv(res_df, file = out_file, row.names = TRUE )
-      
-      
-      getwd()
-      
-      ### Enriquecimiento  --------
+      ### enriquecimiento ---------
+      # ENRIQUECIMIENTO (KEGG_Pathway / KEGG_Module), 
       annotation <- read.delim("fullAnnotation.tsv.txt", stringsAsFactors = FALSE, row.names = 1)
       
-      enriched.FDR <- enriched.p <- vector("list", 2)
-      names(enriched.p) <- names(enriched.FDR) <- c("KEGG_Pathway", "KEGG_Module")
+      
+      enriched.FDR_a <- enriched.p_a <- vector("list", 2)
+      names(enriched.p_a) <- names(enriched.FDR_a) <- c("KEGG_Pathway", "KEGG_Module")
       
       for (i in 1:2) {
-        population <- table(unlist(strsplit(annotation[rownames(annotation) %in% rownames(std.mat),
-                                                       names(enriched.p)[[i]]], split = ",")))
-        results.p <- array(1, length(population)); names(results.p) <- names(population)
-        results.FDR <- results.p
-        hit <- population * 0
+        fam <- names(enriched.p_a)[[i]]
         
-        aux <- table(unlist(strsplit(annotation[rownames(annotation) %in% rownames(DEG.cpm),
-                                                names(enriched.p)[[i]]], split = ",")))
+        population <- table(unlist(strsplit(annotation[rownames(annotation) %in% rownames(std.mat_a),
+                                                       fam], split = ",")))
+        results.p  <- array(1, length(population)); names(results.p) <- names(population)
+        results.FDR<- results.p
+        hit        <- population * 0
+        
+        aux <- table(unlist(strsplit(annotation[rownames(annotation) %in% rownames(DEG.cpm_a),
+                                                fam], split = ",")))
         hit[names(aux)] <- aux
         
         for (k in names(aux)) {
-          # Over-representation: phyper(hitInSample-1, hitInPopulation, failInPopulation, sampleSize, lower.tail=FALSE)
-          results.p[k] <- phyper(hit[k] - 1, population[k], sum(population) - population[k], sum(hit), lower.tail = FALSE)
+          results.p[k] <- phyper(hit[k]-1, population[k], sum(population)-population[k],
+                                 sum(hit), lower.tail = FALSE)
         }
         
-        results.FDR <- p.adjust(results.p, method = "fdr")
-        enriched.p[[i]] <- results.p
-        enriched.FDR[[i]] <- results.FDR
+        results.FDR         <- p.adjust(results.p, method = "fdr")
+        enriched.p_a[[i]]   <- results.p
+        enriched.FDR_a[[i]] <- results.FDR
+        
+        # archivo resumen por familia (Pathway/Module) con sufijo a
+        write.table(t(t(results.FDR)),
+                    file = paste0("Enrichment_FDR_", fam, "_", contr_2a, "_vs_", contr_1a, ".tsv"),
+                    sep  = "\t")
+        # export por cada término significativo (sus genes DEG + anotación KEGG)
+        for (j in names(results.FDR)[results.FDR < 0.05]) {
+          enriched.current <- intersect(
+            rownames(annotation)[grep(j, annotation[, fam])],
+            rownames(DEG.cpm_a)
+          )
+          if (length(enriched.current)) {
+            write.table(
+              cbind(DEG.cpm_a[enriched.current, ],
+                    annotation[enriched.current, grep("KEGG", colnames(annotation))]),
+              file = paste0("Enrichment_FDR_", fam, "_", j, "_", contr_2a, "_vs_", contr_1a, ".tsv"),
+              sep  = "\t"
+            )
+          }
+        }
+      }
+      
+      
+      # Corre "annotation"
+      # ENRIQ... log2FC (A/C) -------------------------------------------
+      
+      # Parámetros y subconjunto 
+      contr_1b <- CCC   # referencia = A
+      contr_2b <- AAA   # numerador = C
+      keep_samples_b <- c(samples_C, samples_A)
+      stopifnot(all(keep_samples_b %in% colnames(counts)))
+      
+      counts_b <- counts[, keep_samples_b, drop = FALSE]
+      
+      # colData (niveles en orden ref→num) 
+      grp_vec_b <- setNames(rep(NA_character_, length(keep_samples_b)), keep_samples_b)
+      grp_vec_b[samples_C] <- "C"
+      grp_vec_b[samples_A] <- "A"
+      
+      coldata_b <- data.frame(Group = factor(grp_vec_b, levels = c(contr_1b, contr_2b)))
+      rownames(coldata_b) <- names(grp_vec_b)
+      
+      ### DESeq2: WALD ---------
+      dds_b <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts_b)),
+                                      colData   = coldata_b,
+                                      design    = ~ Group)
+      dds_b <- dds_b[rowSums(counts(dds_b)) > 0, ]
+      dds_b <- DESeq(dds_b)
+      res_b  <- results(dds_b, contrast = c("Group", contr_2b, contr_1b), alpha = 0.05)
+      resdf_b <- as.data.frame(res_b)
+      
+      #  matrices derivadas (para enriquecimiento / heatmaps) 
+      fpm_b     <- fpm(dds_b)
+      vst_b     <- vst(dds_b, blind = TRUE)
+      std.mat_b <- t(scale(t(log2(fpm(dds_b) + 1))))   # z-score desde log2(FPM+1)
+      
+      # DEGs por padj 
+      padj_b <- res_b$padj; names(padj_b) <- rownames(res_b); padj_b[is.na(padj_b)] <- 1
+      DEG.cpm_b <- fpm_b[padj_b < 0.05, , drop = FALSE]
+      
+      ### Exporta tabla --------
+      res_sig_b <- subset(resdf_b, !is.na(padj) & padj < 0.05)
+      write.csv(res_sig_b,
+                file = paste0("DEG_gene_results_", contr_2b, "_vs_", contr_1b, ".csv"),
+                row.names = TRUE)
+      
+      ### enriquecimiento -------------
+      # ENRIQUECIMIENTO (KEGG_Pathway / KEGG_Module) 
+      if (!exists("annotation")) {
+        annotation <- read.delim("fullAnnotation.tsv.txt", stringsAsFactors = FALSE, row.names = 1)
+      }
+      
+      enriched.FDR_b <- enriched.p_b <- vector("list", 2)
+      names(enriched.p_b) <- names(enriched.FDR_b) <- c("KEGG_Pathway", "KEGG_Module")
+      
+      for (i in 1:2) {
+        fam <- names(enriched.p_b)[[i]]
+        
+        population <- table(unlist(strsplit(
+          annotation[rownames(annotation) %in% rownames(std.mat_b), fam], split = ","
+        )))
+        results.p   <- array(1, length(population)); names(results.p) <- names(population)
+        results.FDR <- results.p
+        hit         <- population * 0
+        
+        aux <- table(unlist(strsplit(
+          annotation[rownames(annotation) %in% rownames(DEG.cpm_b), fam], split = ","
+        )))
+        hit[names(aux)] <- aux
+        
+        for (k in names(aux)) {
+          results.p[k] <- phyper(hit[k]-1, population[k], sum(population)-population[k],
+                                 sum(hit), lower.tail = FALSE)
+        }
+        
+        results.FDR          <- p.adjust(results.p, method = "fdr")
+        enriched.p_b[[i]]    <- results.p
+        enriched.FDR_b[[i]]  <- results.FDR
         
         write.table(t(t(results.FDR)),
-                    file = paste0("Enrichment_FDR_", names(enriched.p)[[i]], ".tsv"),
+                    file = paste0("Enrichment_FDR_", fam, "_", contr_2b, "_vs_", contr_1b, ".tsv"),
                     sep = "\t")
         
         for (j in names(results.FDR)[results.FDR < 0.05]) {
           enriched.current <- intersect(
-            rownames(annotation)[grep(j, annotation[, names(enriched.p)[[i]]])],
-            rownames(DEG.cpm)
+            rownames(annotation)[grep(j, annotation[, fam])],
+            rownames(DEG.cpm_b)
           )
-          write.table(
-            cbind(DEG.cpm[enriched.current, ],
-                  annotation[enriched.current, grep("KEGG", colnames(annotation))]),
-            file = paste0("Enrichment_FDR_", names(enriched.p)[[i]], "_", j, ".tsv"),
-            sep  = "\t"
-          )
+          if (length(enriched.current)) {
+            write.table(
+              cbind(DEG.cpm_b[enriched.current, ],
+                    annotation[enriched.current, grep("KEGG", colnames(annotation))]),
+              file = paste0("Enrichment_FDR_", fam, "_", j, "_", contr_2b, "_vs_", contr_1b, ".tsv"),
+              sep  = "\t"
+            )
+          }
         }
       }
       
-      results.FDR[[1]]
+      
+      # Corre "annotation"
+      # ENRIQ... log2FC (B/C) -------------------------------------------
+      
+      #  Parámetros y subconjunto 
+      contr_1c <- CCC   # referencia = C
+      contr_2c <- BBB   # numerador = B
+      keep_samples_c <- c(samples_C, samples_B)
+      stopifnot(all(keep_samples_c %in% colnames(counts)))
+      
+      counts_c <- counts[, keep_samples_c, drop = FALSE]
+      
+      # colData (niveles en orden ref→num) 
+      grp_vec_c <- setNames(rep(NA_character_, length(keep_samples_c)), keep_samples_c)
+      grp_vec_c[samples_C] <- "C"
+      grp_vec_c[samples_B] <- "B"
+      
+      coldata_c <- data.frame(Group = factor(grp_vec_c, levels = c(contr_1c, contr_2c)))
+      rownames(coldata_c) <- names(grp_vec_c)
+      
+      ### DESeq2: WALD ---------------------
+      dds_c <- DESeqDataSetFromMatrix(countData = as.matrix(round(counts_c)),
+                                      colData   = coldata_c,
+                                      design    = ~ Group)
+      dds_c <- dds_c[rowSums(counts(dds_c)) > 0, ]
+      dds_c <- DESeq(dds_c)
+      res_c  <- results(dds_c, contrast = c("Group", contr_2c, contr_1c), alpha = 0.05)
+      resdf_c <- as.data.frame(res_c)
+      
+      # matrices derivadas (para enriquecimiento / heatmaps) 
+      fpm_c     <- fpm(dds_c)
+      vst_c     <- vst(dds_c, blind = TRUE)
+      std.mat_c <- t(scale(t(log2(fpm(dds_c) + 1))))   # z-score desde log2(FPM+1)
+      
+      # DEGs por padj 
+      padj_c <- res_c$padj; names(padj_c) <- rownames(res_c); padj_c[is.na(padj_c)] <- 1
+      DEG.cpm_c <- fpm_c[padj_c < 0.05, , drop = FALSE]
+      
+      ### Exporta tabla ---------
+      res_sig_c <- subset(resdf_c, !is.na(padj) & padj < 0.05)
+      write.csv(res_sig_c,
+                file = paste0("DEG_gene_results_", contr_2c, "_vs_", contr_1c, ".csv"),
+                row.names = TRUE)
+      
+      ### enriquecimiento -------
+      # (KEGG_Pathway / KEGG_Module) 
+      if (!exists("annotation")) {
+        annotation <- read.delim("fullAnnotation.tsv.txt", stringsAsFactors = FALSE, row.names = 1)
+      }
+      
+      enriched.FDR_c <- enriched.p_c <- vector("list", 2)
+      names(enriched.p_c) <- names(enriched.FDR_c) <- c("KEGG_Pathway", "KEGG_Module")
+      
+      for (i in 1:2) {
+        fam <- names(enriched.p_c)[[i]]
+        
+        population <- table(unlist(strsplit(
+          annotation[rownames(annotation) %in% rownames(std.mat_c), fam], split = ","
+        )))
+        results.p   <- array(1, length(population)); names(results.p) <- names(population)
+        results.FDR <- results.p
+        hit         <- population * 0
+        
+        aux <- table(unlist(strsplit(
+          annotation[rownames(annotation) %in% rownames(DEG.cpm_c), fam], split = ","
+        )))
+        hit[names(aux)] <- aux
+        
+        for (k in names(aux)) {
+          results.p[k] <- phyper(hit[k]-1, population[k], sum(population)-population[k],
+                                 sum(hit), lower.tail = FALSE)
+        }
+        
+        results.FDR          <- p.adjust(results.p, method = "fdr")
+        enriched.p_c[[i]]    <- results.p
+        enriched.FDR_c[[i]]  <- results.FDR
+        
+        write.table(t(t(results.FDR)),
+                    file = paste0("Enrichment_FDR_", fam, "_", contr_2c, "_vs_", contr_1c, ".tsv"),
+                    sep = "\t")
+        
+        for (j in names(results.FDR)[results.FDR < 0.05]) {
+          enriched.current <- intersect(
+            rownames(annotation)[grep(j, annotation[, fam])],
+            rownames(DEG.cpm_c)
+          )
+          if (length(enriched.current)) {
+            write.table(
+              cbind(DEG.cpm_c[enriched.current, ],
+                    annotation[enriched.current, grep("KEGG", colnames(annotation))]),
+              file = paste0("Enrichment_FDR_", fam, "_", j, "_", contr_2c, "_vs_", contr_1c, ".tsv"),
+              sep  = "\t"
+            )
+          }
+        }
+      }
       
       
       
       
-      # DEGs for pattern discovery -----
-      
-      ## Transform DEGs for pattern discovery  ----
-      contr_1
-      contr_2
-      tag <- paste0(contr_2, "_vs_", contr_1)  # E.j. A_vs_C
-      
-      # 0) máscara (contraste) de DEGs por FDR
-      alpha <- 0.05
-      padj <- res$padj
-      padj[is.na(padj)] <- 1              # <- reemplaza NAs por 1 (no significativo)
-      deg_mask <- padj < alpha
-      
-      cat("N NAs en res$padj:", sum(is.na(res$padj)), "\n")
-      cat("DEGs @FDR<", alpha, ": ", sum(deg_mask), "\n", sep="")
-      
-      if (!any(deg_mask)) stop("No DEGs @ FDR<", alpha, " en ", tag)
       
       
-      # 1) FPM normalizados con los size factors de ESTE dds
-      fpm_norm <- fpm(dds)                      # genes x muestras
-      DEG_cpm  <- fpm_norm[deg_mask, , drop=FALSE]
-      cat("[", tag, "] DEG_cpm:", nrow(DEG_cpm), "genes x", ncol(DEG_cpm), "muestras\n")
       
-      # 2) log2(+1)
-      log2_deg <- log2(DEG_cpm + 1)
+      # PLOTING ---------
       
-      # 3) z-score por gen
-      cs.log2 <- t(scale(t(log2_deg)))
+      ### Preparativos (correr una sola vez) -----
       
-      # 4) checks
-      stopifnot(all(is.finite(cs.log2)))
-      stopifnot(identical(colnames(cs.log2), rownames(coldata_1)))
-      cat("z-score range: [", round(min(cs.log2),2), ", ", round(max(cs.log2),2), "]\n", sep="")
       
-      # 5) guardar (opcional)
-      # write.csv(as.data.frame(DEG_cpm), file=paste0("DEGs_FPMnorm_", tag, ".csv"))
-      # write.csv(as.data.frame(cs.log2), file=paste0("DEGs_log2p1_zscore_", tag, ".csv"))
-
-
-
-Analicemos pathways
-Los csv no analicemos module archives "es priorizar"
-
-<img width="1919" height="1199" alt="image" src="https://github.com/user-attachments/assets/026de977-6b07-42a5-851b-ba6f25eba874" />
-
-eggnote es estadistica aplicada → Cualquier persona que use estadistica aplicada le puede llamar AI
-
-
-####################################3
-#################################
-
-# Evidencia de que mi counts es el mismo counts del profesor
-<img width="1217" height="799" alt="image" src="https://github.com/user-attachments/assets/922679a8-4851-448b-8d06-7a8143b08b11" />
-
-
-
-Volcano plot con los padj 
-
-
-
-Diagrama de venn
-
-
-
-
-> [!NOTE]
-> Useful information that users should know, even when skimming content.
-
-> [!TIP]
-> Helpful advice for doing things better or more easily.
-
-> [!IMPORTANT]
-> Key information users need to know to achieve their goal.
-
-> [!WARNING]
-> Urgent info that needs immediate user attention to avoid problems.
-
-> [!CAUTION]
-> Advises about risks or negative outcomes of certain actions.
+      stopifnot(exists("counts"), is.matrix(counts) || is.data.frame(counts))
+      counts <- as.matrix(counts)
+      
+      # Define nombres de grupos (solo etiquetas, para los niveles del factor)
+      AAA <- "A"   # numerador del log2FC (A vs B)      
+      BBB <- "B"   # referencia
+      CCC <- "C"   # control
+      
+      # Define los vectores de muestras por grupo (reutilizados en los 3 contrastes)
+      samples_A <- c("H13","H14")
+      samples_B <- c("H9","H10","H11","H12")
+      samples_C <- c("H15")
+      
+      stopifnot(all(c(samples_A, samples_B, samples_C) %in% colnames(counts_good)))
+      
+      # Umbral para volcano y heatmap (ajústalo si quieres)
+      alpha_padj <- 0.05
+      lfc_thr    <- 1
+      n_top_hm   <- 30
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      ### Contraste 1: A vs B  (log2FC = A/B) ----------
+      
+      # log2FC = contr_2 / contr_1
+      
+      # log2FC > 0 ⇒ el gen está sobreexpresado (upregulated) en contr_2 respecto a contr_1
+      # log2FC < 0 ⇒ el gen está subexpresado (downregulated) en contr_2 respecto a contr_1
+      # Puedes decir “sobre/subrepresentado” si hablas de abundancia/CPM, pero para DEGs es más claro up/downregulated
+      
+      
+      # 1) Parámetros del par y subconjunto de muestras
+      contr_1a <- AAA   # referencia (denominador)
+      contr_2a <- BBB   # numerador
+      keep_samples_a <- c(samples_B, samples_A)  # B primero, A después
+      stopifnot(all(keep_samples_a %in% colnames(counts_good)))
+      
+      counts_1a <- counts_good[, keep_samples_a, drop = FALSE]
+      
+      # 2) colData con factor Group y niveles (contr_1a, contr_2a)
+      grp_vec_a <- setNames(rep(NA_character_, length(keep_samples_a)), keep_samples_a)
+      grp_vec_a[samples_A] <- "A"
+      grp_vec_a[samples_B] <- "B"
+      
+      coldata_a <- data.frame(Group = factor(grp_vec_a, levels = c(contr_1a, contr_2a)))
+      rownames(coldata_a) <- names(grp_vec_a)
+      
+      # 2.5) Chequeos y redondeo a enteros (recomendado para DESeq2)
+      stopifnot(identical(colnames(counts_1a), rownames(coldata_a)))     # mismas muestras
+      if (any(is.na(counts_1a))) stop("Hay NAs en counts_1a")
+      
+      bad_a <- which(abs(counts_1a - round(counts_1a)) > 1e-8, arr.ind = TRUE)
+      cat("Celdas no enteras en counts_1a:", nrow(bad_a), "\n")
+      counts_1a_int <- as.matrix(round(counts_1a))
+      
+      # 3) DESeq2 (sin shrink)
+      dds_a <- DESeqDataSetFromMatrix(countData = counts_1a_int, colData = coldata_a, design = ~ Group)
+      dds_a <- dds_a[rowSums(counts(dds_a)) > 0, ]   # por si queda algún gen en cero
+      dds_a <- DESeq(dds_a)
+      res_a <- results(dds_a, contrast = c("Group", contr_2a, contr_1a))  # A vs B
+      resdf_a <- as.data.frame(res_a)
+      resdf_a$gene <- rownames(resdf_a)
+      
+      # Etiquetas para barplot (dirección y significancia)
+      resdf_a$direction <- ifelse(resdf_a$log2FoldChange > 0, paste0("up in ", contr_2a),
+                                  ifelse(resdf_a$log2FoldChange < 0, paste0("down in ", contr_2a), "no change"))
+      resdf_a$sig <- ifelse(!is.na(resdf_a$padj) & resdf_a$padj < alpha_padj, "significant", "ns")
+      
+      # 4) Normalización para gráficos (VST)
+      vst_a <- vst(dds_a, blind = TRUE)
+      normcounts_a <- assay(vst_a)  # para PCA/Heatmap
+      
+      #### PCA (A vs B) --------------------------------------------------------------
+      # Separación global por grupos; puntos = muestras
+      # PCA (Contraste A vs B) — usa vst_a y sufijos 'a'
+      pca_a <- DESeq2::plotPCA(vst_a, intgroup = "Group", returnData = TRUE)
+      
+      # solo niveles del contraste, en orden: B (ref) y A
+      pca_a$Group <- factor(as.character(pca_a$Group), levels = c(contr_1a, contr_2a))
+      
+      # colores fijos para B y A
+      col_ab <- setNames(c("#fdac4f", "#a2593d"), c(contr_1a, contr_2a))
+      
+      ggplot(pca_a, aes(PC1, PC2, color = Group, label = name)) +
+        geom_point(size = 3) +
+        ggrepel::geom_text_repel(show.legend = FALSE, size = 3) +
+        scale_color_manual(values = col_ab, breaks = c(contr_1a, contr_2a), name = "Group") +
+        labs(
+          title    = paste0("PCA (", contr_2a, " vs ", contr_1a, ")"),
+          subtitle = "Transformación VST",
+          x = paste0("PC1: ", round(100 * attr(pca_a, "percentVar")[1], 1), "%"),
+          y = paste0("PC2: ", round(100 * attr(pca_a, "percentVar")[2], 1), "%")
+        ) +
+        theme_classic(base_size = 10) +
+        theme(
+          plot.title    = element_text(hjust = 0.5, face = "bold"),  # centrado
+          plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),  # a la derecha
+          axis.title    = element_text(size = 12),
+          axis.text     = element_text(size = 12),
+          legend.title  = element_text(size = 10),
+          legend.text   = element_text(size = 10)
+        )
+      
+      
+      
+      #### MA-plot (A vs B) ----------------------------------------------------------
+      # log2FC vs abundancia media; DESeq2 resalta significativos
+      # --- preparar datos MA (A = log10 baseMean, M = log2FC) ---
+      ma_a <- transform(as.data.frame(res_a),
+                        A = log10(baseMean + 1),
+                        M = log2FoldChange)
+      
+      # reglas de significancia y dirección (reusa tus umbrales)
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      ma_a$flag <- with(ma_a,
+                        ifelse(!is.na(padj) & padj < alpha_padj & abs(M) >= lfc_thr,
+                               ifelse(M > 0, paste0("up in ", contr_2a),
+                                      paste0("down in ", contr_2a)),
+                               "ns"))
+      
+      # paleta consistente con el resto
+      cols_a <- c("ns" = "grey80",
+                  setNames("#a5923d", paste0("up in ",   contr_2a)),
+                  setNames("#aa4d6f", paste0("down in ", contr_2a)))
+      
+      # Límites que quieras (ajústalos a gusto)
+      x_lim_a <- c(0, 6)      # eje X en log10(baseMean+1)
+      y_lim_a <- c(-12, 12)   # eje Y en log2FC
+      
+      # --- GGPlot con el “look” del PCA ---
+      p_ma_a <- ggplot(ma_a, aes(A, M)) +
+        geom_point(aes(color = flag), size = 1.2, alpha = 0.7) +
+        geom_hline(yintercept = 0, colour = "grey40") +
+        geom_hline(yintercept = c(-lfc_thr, lfc_thr), linetype = "dashed") +
+        scale_color_manual(values = cols_a, name = "") +
+        labs(
+          title    = sprintf("MA-plot (%s vs %s)", contr_2a, contr_1a),
+          subtitle = sprintf("DESeq2 • (padj < %.2f) & (log2FC ≥ %g)", alpha_padj, lfc_thr),
+          x = "log10(baseMean + 1)",
+          y = "log2 Fold Change"
+        ) +
+        coord_cartesian(xlim = x_lim_a, ylim = y_lim_a) +
+        theme_classic(base_size = 12) +
+        theme(
+          plot.title    = element_text(hjust = 0.5, face = "bold"),
+          plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+          axis.title    = element_text(size = 12),
+          axis.text     = element_text(size = 12),
+          legend.title  = element_text(size = 10),
+          legend.text   = element_text(size = 10)
+        )
+      
+      p_ma_a
+      
+      
+      #### Volcano (A vs B) ----------------------------------------------------------
+      
+      # 1) clasificar puntos (up/down/ns) y evitar Inf cuando padj = 0
+      volcano_a <- transform(
+        resdf_a,
+        padj_plot = pmin(padj, 1),
+        dir = ifelse(is.na(padj) | padj >= alpha_padj | abs(log2FoldChange) < lfc_thr,
+                     "ns",
+                     ifelse(log2FoldChange > 0,
+                            paste0("up in ",   contr_2a),
+                            paste0("down in ", contr_2a)))
+      )
+      
+      # 2) paleta como en MA-plot
+      cols_a <- setNames(  c("#aa4d6f", "grey75", "#a5923d"),
+        c(paste0("down in ", contr_2a), "ns", paste0("up in ", contr_2a))
+      )
+      
+      
+      # 3) gráfico
+      library(ggplot2)
+      ggplot(volcano_a, aes(x = log2FoldChange, y = -log10(padj_plot), color = dir)) +
+        geom_point(alpha = 0.75, size = 1.2) +
+        geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed", colour = "grey40") +
+        geom_hline(yintercept = -log10(alpha_padj),  linetype = "dashed", colour = "grey40") +
+        scale_color_manual(values = cols_a, name = NULL) +
+        labs(
+          title    = "Volcano (A vs B)",
+          subtitle = "DESeq2 • (padj < 0.05) & (log2FC ≥ 1)",
+          x = paste0("log2FC (", contr_2a, " / ", contr_1a, ")"),
+          y = "-log10(padj)"
+        ) +
+        theme_classic(base_size = 12) +
+        theme(
+          plot.title    = element_text(hjust = 0.5, face = "bold"),
+          plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+          axis.title    = element_text(size = 12),
+          axis.text     = element_text(size = 12),
+          legend.title  = element_text(size = 10),
+          legend.text   = element_text(size = 10)
+        )
+      
+      
+      
+      
+      #### Heatmap (A vs B) ----------------------------------
+      # top genes por padj (A vs B)
+      
+      # 1) Selección de genes más significativos por padj
+      n_top_hm <- 150                                    # cambiar
+      ord_a    <- order(resdf_a$padj, na.last = NA)
+      top_a    <- head(rownames(resdf_a)[ord_a], n_top_hm)
+      
+      # 2) Matriz VST normalizada + centrado por gen (z-score por fila sin escalar sd)
+      mat_a0 <- normcounts_a[top_a, , drop = FALSE]
+      mat_a  <- mat_a0 - rowMeans(mat_a0)
+      
+      # 3) Anotaciones de columnas (Group) con niveles en orden (contr_1a = referencia, contr_2a = numerador)
+      ann_a <- data.frame(Group = coldata_a$Group,
+                          row.names = rownames(coldata_a))
+      ann_a$Group <- factor(as.character(ann_a$Group),
+                            levels = c(contr_1a, contr_2a))
+      
+      # 1) Colores extremos (ajústalos si quieres)
+      col_neg_a <- "#aa4d6f"  # morado (menor que la media de su gen)
+      col_pos_a <- "#a5923d"  # verde (mayor que la media de su gen)
+      
+      # Color group
+      ann_colors_a <- list(
+        Group = setNames(
+          c("#fdac4f", "#a2593d"),            # B = café, A = amarillo (ajusta si quieres)
+          c(contr_1a,  contr_2a)
+        )
+      )
+      
+      # 2) Degradado azul → blanco → rojo (blanco en 0 para que el centro sea neutro)
+      nbreaks_a <- 256
+      lim_a     <- max(abs(mat_a))  # simétrico alrededor de 0
+      breaks_a  <- seq(-lim_a, lim_a, length.out = nbreaks_a)
+      hm_cols_a <- colorRampPalette(c(col_neg_a, "#f7efe6", col_pos_a))(nbreaks_a - 1)
+      
+      # 3) Ticks de la barra de color (leyenda de la escala)
+      ticks_a <- pretty(c(-lim_a, lim_a), n = 5)
+      
+      # 4) Heatmap
+      pheatmap(mat_a,
+               color = hm_cols_a, breaks = breaks_a,
+               scale = "none",                         # ya centramos por fila
+               border_color = NA,
+               show_rownames = FALSE,
+               clustering_distance_rows = "euclidean",
+               clustering_distance_cols = "correlation",
+               clustering_method = "ward.D2",
+               annotation_col    = ann_a,
+               annotation_colors = ann_colors_a,
+               legend_breaks = ticks_a,
+               legend_labels = sprintf("%.1f", ticks_a),
+               main = sprintf("Heatmap top %d en %s vs %s\n",             # \n → Sirve para dar enter
+                              n_top_hm, contr_2a, contr_1a),
+               fontsize_col = 10, treeheight_row = 30, treeheight_col = 30)
+      
+      
+      #### Barplot (A vs B):  --------------------------
+      # número de DEGs por dirección
+      # 0) Umbrales (usa los que ya tengas; si no existen, pongo defaults)
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      # 1) Etiquetas dinámicas respecto a contr_2a (numerador del log2FC)
+      lab_up_a   <- paste0("up in ",   contr_2a)
+      lab_down_a <- paste0("down in ", contr_2a)
+      
+      # 2) Tabla de conteos SOLO con genes significativos
+      tmp_a <- within(resdf_a, {
+        sig <- !is.na(padj) & (padj < alpha_padj) & (abs(log2FoldChange) >= lfc_thr)
+        direction <- ifelse(log2FoldChange > 0, lab_up_a,
+                            ifelse(log2FoldChange < 0, lab_down_a, NA))
+      })
+      bar_df_a <- as.data.frame(table(tmp_a$direction[tmp_a$sig]))
+      names(bar_df_a) <- c("dir", "n")
+      bar_df_a$dir <- factor(bar_df_a$dir, levels = c(lab_up_a, lab_down_a))
+      
+      # 3) Colores (mismo esquema que MA/volcano: rojo = up, azul = down)
+      cols_a <- setNames(c("#a5923d", "#aa4d6f"), c(lab_up_a, lab_down_a))
+      
+      # 4) Gráfico
+      if (nrow(bar_df_a) > 0) {
+        ggplot(bar_df_a, aes(x = dir, y = n, fill = dir)) +
+          geom_col(width = 0.65) +
+          geom_text(aes(label = n), vjust = -0.35, size = 4) +
+          scale_fill_manual(values = cols_a, guide = "none") +
+          labs(
+            title    = paste0("DEGs por dirección (", contr_2a, " vs ", contr_1a, ")"),
+            subtitle = paste0("padj < ", alpha_padj, "  &  (log2FC) ≥ ", lfc_thr),
+            x        = paste0("Dirección (respecto a ", contr_2a, ")"),
+            y        = "Número de genes"
+          ) +
+          ylim(0, max(bar_df_a$n) * 1.15) +
+          theme_classic(base_size = 12) +
+          theme(
+            plot.title    = element_text(hjust = 0.5, face = "bold"),
+            plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+            axis.text     = element_text(size = 10),
+            axis.title    = element_text(size = 12)
+          )
+      } else {
+        message("No hay DEGs con los umbrales (padj & log2FC) para el barplot.")
+      }
+      
+      
+      
+      
+      
+      
+      ## Contraste 2: A vs C  (log2FC = A/C) ---------------------------------------
+      
+      # Numerador / denominador para results()
+      contr_1b <- CCC   # C = Control (denominador)
+      contr_2b <- AAA   # A = numerador
+      
+      # Muestras del contraste: primero C (ref), luego A
+      keep_samples_b <- c(samples_C, samples_A)
+      stopifnot(all(keep_samples_b %in% colnames(counts_good)))
+      
+      counts_1b <- counts_good[, keep_samples_b, drop = FALSE]
+      
+      ## 2) colData (mismos niveles que el contraste)
+      grp_vec_b <- setNames(rep(NA_character_, length(keep_samples_b)), keep_samples_b)
+      grp_vec_b[samples_A] <- "A"
+      grp_vec_b[samples_C] <- "C"
+      
+      coldata_b <- data.frame(Group = factor(grp_vec_b, levels = c(contr_1b, contr_2b)))
+      rownames(coldata_b) <- names(grp_vec_b)
+      
+      ## 2.5) Chequeos + redondeo (recomendado por DESeq2)
+      stopifnot(identical(colnames(counts_1b), rownames(coldata_b)))
+      if (any(is.na(counts_1b))) stop("Hay NAs en counts_1b")
+      
+      bad_b <- which(abs(counts_1b - round(counts_1b)) > 1e-8, arr.ind = TRUE)
+      cat("Celdas no enteras en counts_1b:", nrow(bad_b), "\n")
+      counts_1b_int <- as.matrix(round(counts_1b))
+      
+      ## 3) DESeq2 (sin shrink)
+      dds_b <- DESeqDataSetFromMatrix(countData = counts_1b_int, colData = coldata_b, design = ~ Group)
+      dds_b <- dds_b[rowSums(counts(dds_b)) > 0, ]
+      dds_b <- DESeq(dds_b)
+      res_b <- results(dds_b, contrast = c("Group", contr_2b, contr_1b))  # A vs C
+      resdf_b <- as.data.frame(res_b)
+      resdf_b$gene <- rownames(resdf_b)
+      
+      # Umbrales si no existen
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      # Etiquetas (dirección/significancia)
+      resdf_b$direction <- ifelse(resdf_b$log2FoldChange > 0, paste0("up in ", contr_2b),
+                                  ifelse(resdf_b$log2FoldChange < 0, paste0("down in ", contr_2b), "no change"))
+      resdf_b$sig <- ifelse(!is.na(resdf_b$padj) & resdf_b$padj < alpha_padj, "significant", "ns")
+      
+      ## 4) VST para gráficos
+      vst_b <- vst(dds_b, blind = TRUE)
+      normcounts_b <- assay(vst_b)
+      
+      #### PCA (A vs C) -------------------------------------------
+      # plotPCA usa por defecto ~500 genes más variables (no solo DEGs)
+      pca_b <- DESeq2::plotPCA(vst_b, intgroup = "Group", returnData = TRUE)
+      pca_b$Group <- factor(as.character(pca_b$Group), levels = c(contr_1b, contr_2b))
+      
+      # Colores: Control (C) = #3d6863, A = mismo tono que usaste para A
+      col_ac <- setNames(c("#3d6863", "#a2593d"), c(contr_1b, contr_2b))
+      
+      ggplot(pca_b, aes(PC1, PC2, color = Group, label = name)) +
+        geom_point(size = 3) +
+        ggrepel::geom_text_repel(show.legend = FALSE, size = 3) +
+        scale_color_manual(values = col_ac, breaks = c(contr_1b, contr_2b), name = "Group") +
+        labs(
+          title    = paste0("PCA (", contr_2b, " vs ", contr_1b, ")"),
+          subtitle = "Transformación VST",
+          x = paste0("PC1: ", round(100 * attr(pca_b, "percentVar")[1], 1), "%"),
+          y = paste0("PC2: ", round(100 * attr(pca_b, "percentVar")[2], 1), "%")
+        ) +
+        theme_classic(base_size = 10) +
+        theme(
+          plot.title    = element_text(hjust = 0.5, face = "bold"),
+          plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+          axis.title    = element_text(size = 12),
+          axis.text     = element_text(size = 12),
+          legend.title  = element_text(size = 10),
+          legend.text   = element_text(size = 10)
+        )
+      
+      
+      #### MA-plot (A vs C) --------------------------------------------------
+      
+      # 1) clasificar puntos (up/down/ns) y evitar Inf cuando padj = 0
+      volcano_b <- transform(
+        resdf_b,
+        padj_plot = pmin(padj, 1),
+        dir = ifelse(is.na(padj) | padj >= alpha_padj | abs(log2FoldChange) < lfc_thr,
+                     "ns",
+                     ifelse(log2FoldChange > 0,
+                            paste0("up in ",   contr_2b),
+                            paste0("down in ", contr_2b)))
+      )
+      
+      # 2) paleta como en MA-plot
+      cols_b <- setNames(  c("#aa4d6f", "grey75", "#a5923d"),
+                           c(paste0("down in ", contr_2b), "ns", paste0("up in ", contr_2b))
+      )
+      
+      
+      # 3) gráfico
+      library(ggplot2)
+      ggplot(volcano_b, aes(x = log2FoldChange, y = -log10(padj_plot), color = dir)) +
+        geom_point(alpha = 0.75, size = 1.2) +
+        geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed", colour = "grey40") +
+        geom_hline(yintercept = -log10(alpha_padj),  linetype = "dashed", colour = "grey40") +
+        scale_color_manual(values = cols_b, name = NULL) +
+        labs(
+          title    = "Volcano (A vs C)",
+          subtitle = "DESeq2 • (padj < 0.05) & (log2FC ≥ 1)",
+          x = paste0("log2FC (", contr_2b, " / ", contr_1b, ")"),
+          y = "-log10(padj)"
+        ) +
+        theme_classic(base_size = 12) +
+        theme(
+          plot.title    = element_text(hjust = 0.5, face = "bold"),
+          plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+          axis.title    = element_text(size = 12),
+          axis.text     = element_text(size = 12),
+          legend.title  = element_text(size = 10),
+          legend.text   = element_text(size = 10)
+        )
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      #### Volcano (A vs C) ------------------------------------------------
+      ## MA-plot (A vs C) — idéntico al de A vs B
+      ma_b <- transform(as.data.frame(res_b),
+                        A = log10(baseMean + 1),
+                        M = log2FoldChange)
+      
+      ma_b$flag <- with(ma_b,
+                        ifelse(!is.na(padj) & padj < alpha_padj & abs(M) >= lfc_thr,
+                               ifelse(M > 0, paste0("up in ",   contr_2b),
+                                      paste0("down in ", contr_2b)),
+                               "ns"))
+      
+      # MISMA paleta que usaste: ns gris, up verde, down morado
+      cols_b <- setNames(c("#aa4d6f", "grey80", "#a5923d"),
+                         c(paste0("down in ", contr_2b), "ns", paste0("up in ", contr_2b)))
+      
+      # MISMOS límites (ajústalos si quieres)
+      x_lim_b <- c(0, 6)
+      y_lim_b <- c(-12, 12)
+      
+      library(ggplot2)
+      ggplot(ma_b, aes(A, M, color = flag)) +
+        geom_point(size = 1.2, alpha = 0.7) +
+        geom_hline(yintercept = 0,                  colour = "grey40") +
+        geom_hline(yintercept = c(-lfc_thr, lfc_thr), linetype = "dashed", colour = "grey40") +
+        scale_color_manual(values = cols_b, name = NULL) +
+        labs(title    = paste0("MA-plot (", contr_2b, " vs ", contr_1b, ")"),
+             subtitle = sprintf("DESeq2 • (padj < %.2f) & |log2FC| ≥ %g", alpha_padj, lfc_thr),
+             x = "log10(baseMean + 1)", y = "log2 Fold Change") +
+        coord_cartesian(xlim = x_lim_b, ylim = y_lim_b) +
+        theme_classic(base_size = 12) +
+        theme(plot.title    = element_text(hjust = 0.5, face = "bold"),
+              plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+              axis.title    = element_text(size = 12),
+              axis.text     = element_text(size = 12),
+              legend.title  = element_text(size = 10),
+              legend.text   = element_text(size = 10))
+      
+      
+      #### Heatmap (A vs C) ---------------------------------------------------
+      # top genes por padj
+      # Top N por padj (solo DEGs más significativos)
+      n_top_hm <- 150
+      ord_b    <- order(resdf_b$padj, na.last = NA)
+      top_b    <- head(rownames(resdf_b)[ord_b], n_top_hm)
+      
+      mat_b0 <- normcounts_b[top_b, , drop = FALSE]
+      mat_b  <- mat_b0 - rowMeans(mat_b0)  # centrado por gen
+      
+      ann_b <- data.frame(Group = coldata_b$Group, row.names = rownames(coldata_b))
+      ann_b$Group <- factor(as.character(ann_b$Group), levels = c(contr_1b, contr_2b))
+      
+      # Colores de grupo: Control con #3d6863
+      ann_colors_b <- list(Group = setNames(c("#3d6863", "#a2593d"), c(contr_1b, contr_2b)))
+      
+      # Gradiente simétrico alrededor de 0 (mismo esquema que A vs B)
+      col_neg_b <- "#aa4d6f"; col_pos_b <- "#a5923d"
+      nbreaks_b <- 256
+      lim_b     <- max(abs(mat_b))
+      breaks_b  <- seq(-lim_b, lim_b, length.out = nbreaks_b)
+      hm_cols_b <- colorRampPalette(c(col_neg_b, "#f7efe6", col_pos_b))(nbreaks_b - 1)
+      ticks_b   <- pretty(c(-lim_b, lim_b), n = 5)
+      
+      pheatmap(mat_b,
+               color = hm_cols_b, breaks = breaks_b, scale = "none",
+               border_color = NA, show_rownames = FALSE,
+               clustering_distance_rows = "euclidean",
+               clustering_distance_cols = "correlation",
+               clustering_method = "ward.D2",
+               annotation_col    = ann_b,
+               annotation_colors = ann_colors_b,
+               legend_breaks = ticks_b,
+               legend_labels = sprintf("%.1f", ticks_b),
+               main = sprintf("Heatmap top %d en %s vs %s\n", n_top_hm, contr_2b, contr_1b),
+               fontsize_col = 10, treeheight_row = 30, treeheight_col = 30)
+      
+      
+      #### Barplot (A vs C) --------------------------------------------------
+      lab_up_b   <- paste0("up in ",   contr_2b)
+      lab_down_b <- paste0("down in ", contr_2b)
+      
+      tmp_b <- within(resdf_b, {
+        sig <- !is.na(padj) & (padj < alpha_padj) & (abs(log2FoldChange) >= lfc_thr)
+        direction <- ifelse(log2FoldChange > 0, lab_up_b,
+                            ifelse(log2FoldChange < 0, lab_down_b, NA))
+      })
+      bar_df_b <- as.data.frame(table(tmp_b$direction[tmp_b$sig]))
+      names(bar_df_b) <- c("dir", "n")
+      bar_df_b$dir <- factor(bar_df_b$dir, levels = c(lab_up_b, lab_down_b))
+      
+      cols_bar_b <- setNames(c("#a5923d", "#aa4d6f"), c(lab_up_b, lab_down_b))
+      
+      if (nrow(bar_df_b) > 0) {
+        ggplot(bar_df_b, aes(x = dir, y = n, fill = dir)) +
+          geom_col(width = 0.65) +
+          geom_text(aes(label = n), vjust = -0.35, size = 4) +
+          scale_fill_manual(values = cols_bar_b, guide = "none") +
+          labs(
+            title    = paste0("DEGs por dirección (", contr_2b, " vs ", contr_1b, ")"),
+            subtitle = paste0("(padj < ", alpha_padj, ")", "  &  (log2FC ≥ ", lfc_thr, ")"),
+            x        = paste0("Dirección (respecto a ", contr_2b, ")"),
+            y        = "Número de genes"
+          ) +
+          ylim(0, max(bar_df_b$n) * 1.15) +
+          theme_classic(base_size = 12) +
+          theme(
+            plot.title    = element_text(hjust = 0.5, face = "bold"),
+            plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30")
+          )
+      } else {
+        message("No hay DEGs con los umbrales (padj & log2FC) para el barplot (A vs C).")
+      }
+      
+      
+      
+      
+      
+      ## Contraste 3: B vs C  (log2FC = B/C) ---------------------------------------
+      # Qué se ve en cada gráfico (resumen):
+      # - PCA: TODAS las muestras (vst) de los grupos del contraste.
+      # - MA-plot: TODOS los genes analizados; se resaltan los DEGs según padj y |log2FC|.
+      # - Volcano: TODOS los genes; se resaltan los DEGs.
+      # - Heatmap: SOLO los top N DEGs (por padj).
+      # - Barplot: SOLO cuenta DEGs (por dirección up/down).
+      
+      ## 1) Parámetros y subconjunto (B vs C)
+      contr_1c <- CCC   # referencia (denominador, C)
+      contr_2c <- BBB   # numerador  (B)
+      keep_samples_c <- c(samples_C, samples_B)
+      stopifnot(all(keep_samples_c %in% colnames(counts_good)))
+      counts_1c <- counts_good[, keep_samples_c, drop = FALSE]
+      
+      ## 2) colData con niveles en orden (C, B)
+      grp_vec_c <- setNames(rep(NA_character_, length(keep_samples_c)), keep_samples_c)
+      grp_vec_c[samples_B] <- "B"
+      grp_vec_c[samples_C] <- "C"
+      coldata_c <- data.frame(Group = factor(grp_vec_c, levels = c(contr_1c, contr_2c)))
+      rownames(coldata_c) <- names(grp_vec_c)
+      
+      ## 2.5) Chequeos y redondeo
+      stopifnot(identical(colnames(counts_1c), rownames(coldata_c)))
+      if (any(is.na(counts_1c))) stop("Hay NAs en counts_1c")
+      bad_c <- which(abs(counts_1c - round(counts_1c)) > 1e-8, arr.ind = TRUE)
+      cat("Celdas no enteras en counts_1c:", nrow(bad_c), "\n")
+      counts_1c_int <- as.matrix(round(counts_1c))
+      
+      ## 3) DESeq2 (sin shrink)
+      dds_c  <- DESeqDataSetFromMatrix(countData = counts_1c_int, colData = coldata_c, design = ~ Group)
+      dds_c  <- dds_c[rowSums(counts(dds_c)) > 0, ]
+      dds_c  <- DESeq(dds_c)
+      res_c  <- results(dds_c, contrast = c("Group", contr_2c, contr_1c))  # B vs C
+      resdf_c <- as.data.frame(res_c)
+      resdf_c$gene <- rownames(resdf_c)
+      
+      ## Etiquetas up/down y significancia (para barplot/volcano)
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      resdf_c$direction <- ifelse(resdf_c$log2FoldChange > 0, paste0("up in ", contr_2c),
+                                  ifelse(resdf_c$log2FoldChange < 0, paste0("down in ", contr_2c), "no change"))
+      resdf_c$sig <- ifelse(!is.na(resdf_c$padj) & resdf_c$padj < alpha_padj, "significant", "ns")
+      
+      ## 4) Normalización para gráficos (VST)
+      vst_c        <- vst(dds_c, blind = TRUE)
+      normcounts_c <- assay(vst_c)
+      
+      #### PCA (B vs C) --------------------------------------------------------------
+      # Muestras (TODAS las del contraste) en espacio PCA; color por Group.
+      pca_c <- DESeq2::plotPCA(vst_c, intgroup = "Group", returnData = TRUE)
+      pca_c$Group <- factor(as.character(pca_c$Group), levels = c(contr_1c, contr_2c))
+      # Paleta fija: Control = #3d6863, B = #fdac4f
+      col_bc <- setNames(c("#3d6863", "#fdac4f"), c(contr_1c, contr_2c))
+      
+      ggplot(pca_c, aes(PC1, PC2, color = Group, label = name)) +
+        geom_point(size = 3) +
+        ggrepel::geom_text_repel(show.legend = FALSE, size = 3) +
+        scale_color_manual(values = col_bc, breaks = c(contr_1c, contr_2c), name = "Group") +
+        labs(
+          title    = paste0("PCA (", contr_2c, " vs ", contr_1c, ")"),
+          subtitle = "Transformación VST",
+          x = paste0("PC1: ", round(100 * attr(pca_c, "percentVar")[1], 1), "%"),
+          y = paste0("PC2: ", round(100 * attr(pca_c, "percentVar")[2], 1), "%")
+        ) +
+        theme_classic(base_size = 12) +
+        theme(plot.title    = element_text(hjust = 0.5, face = "bold"),
+              plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+              axis.title    = element_text(size = 12),
+              axis.text     = element_text(size = 12),
+              legend.title  = element_text(size = 10),
+              legend.text   = element_text(size = 10))
+      
+      #### MA-plot (B vs C) ----------------------------------------------------------
+      # TODOS los genes; resaltamos DEGs (padj & |log2FC|).
+      ma_c <- transform(as.data.frame(res_c),
+                        A = log10(baseMean + 1),
+                        M = log2FoldChange)
+      
+      ma_c$flag <- with(ma_c,
+                        ifelse(!is.na(padj) & padj < alpha_padj & abs(M) >= lfc_thr,
+                               ifelse(M > 0, paste0("up in ",   contr_2c),
+                                      paste0("down in ", contr_2c)),
+                               "ns"))
+      
+      cols_c <- setNames(c("#aa4d6f", "grey80", "#a5923d"),
+                         c(paste0("down in ", contr_2c), "ns", paste0("up in ", contr_2c)))
+      x_lim_c <- c(0, 6)
+      y_lim_c <- c(-12, 12)
+      
+      ggplot(ma_c, aes(A, M, color = flag)) +
+        geom_point(size = 1.2, alpha = 0.7) +
+        geom_hline(yintercept = 0, colour = "grey40") +
+        geom_hline(yintercept = c(-lfc_thr, lfc_thr), linetype = "dashed", colour = "grey40") +
+        scale_color_manual(values = cols_c, name = NULL) +
+        labs(title    = paste0("MA-plot (", contr_2c, " vs ", contr_1c, ")"),
+             subtitle = sprintf("DESeq2 • (padj < %.2f) & (log2FC ≥ %g)", alpha_padj, lfc_thr),
+             x = "log10(baseMean + 1)", y = "log2 Fold Change") +
+        coord_cartesian(xlim = x_lim_c, ylim = y_lim_c) +
+        theme_classic(base_size = 12) +
+        theme(plot.title    = element_text(hjust = 0.5, face = "bold"),
+              plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+              axis.title    = element_text(size = 12),
+              axis.text     = element_text(size = 12),
+              legend.title  = element_text(size = 10),
+              legend.text   = element_text(size = 10))
+      
+      #### Volcano (B vs C) ----------------------------------------------------------
+      # TODOS los genes; resaltamos DEGs.
+      volcano_c <- transform(
+        resdf_c,
+        padj_plot = pmin(padj, 1),
+        dir = ifelse(is.na(padj) | padj >= alpha_padj | abs(log2FoldChange) < lfc_thr,
+                     "ns",
+                     ifelse(log2FoldChange > 0,
+                            paste0("up in ",   contr_2c),
+                            paste0("down in ", contr_2c)))
+      )
+      cols_c <- setNames(c("#aa4d6f", "grey75", "#a5923d"),
+                         c(paste0("down in ", contr_2c), "ns", paste0("up in ", contr_2c)))
+      
+      ggplot(volcano_c, aes(x = log2FoldChange, y = -log10(padj_plot), color = dir)) +
+        geom_point(alpha = 0.75, size = 1.2) +
+        geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed", colour = "grey40") +
+        geom_hline(yintercept = -log10(alpha_padj),  linetype = "dashed", colour = "grey40") +
+        scale_color_manual(values = cols_c, name = NULL) +
+        labs(title    = paste0("Volcano (", contr_2c, " vs ", contr_1c, ")"),
+             subtitle = sprintf("DESeq2 • (padj < %.2f) & (log2FC ≥ %g)", alpha_padj, lfc_thr),
+             x = paste0("log2FC (", contr_2c, " / ", contr_1c, ")"),
+             y = "-log10(padj)") +
+        theme_classic(base_size = 12) +
+        theme(plot.title    = element_text(hjust = 0.5, face = "bold"),
+              plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+              axis.title    = element_text(size = 12),
+              axis.text     = element_text(size = 12),
+              legend.title  = element_text(size = 10),
+              legend.text   = element_text(size = 10))
+      
+      #### Heatmap (B vs C) -----------------------------------------------
+      # top genes
+      # SOLO los top N DEGs (por padj); z-score por gen (centrado a media 0).
+      n_top_hm <- if (exists("n_top_hm")) n_top_hm else 150
+      ord_c    <- order(resdf_c$padj, na.last = NA)
+      top_c    <- head(rownames(resdf_c)[ord_c], n_top_hm)
+      
+      mat_c0 <- normcounts_c[top_c, , drop = FALSE]
+      mat_c  <- mat_c0 - rowMeans(mat_c0)
+      
+      ann_c <- data.frame(Group = coldata_c$Group, row.names = rownames(coldata_c))
+      ann_c$Group <- factor(as.character(ann_c$Group), levels = c(contr_1c, contr_2c))
+      
+      # Anotación de columnas (Group): Control (#3d6863), B (#fdac4f)
+      ann_colors_c <- list(Group = setNames(c("#3d6863", "#fdac4f"), c(contr_1c, contr_2c)))
+      
+      # Gradiente simétrico (mismos colores que usaste antes)
+      nbreaks_c <- 256
+      lim_c     <- max(abs(mat_c))
+      breaks_c  <- seq(-lim_c, lim_c, length.out = nbreaks_c)
+      hm_cols_c <- colorRampPalette(c("#aa4d6f", "#f7efe6", "#a5923d"))(nbreaks_c - 1)
+      ticks_c   <- pretty(c(-lim_c, lim_c), n = 5)
+      
+      pheatmap(mat_c,
+               color = hm_cols_c, breaks = breaks_c,
+               scale = "none", border_color = NA,
+               show_rownames = FALSE,
+               clustering_distance_rows = "euclidean",
+               clustering_distance_cols = "correlation",
+               clustering_method = "ward.D2",
+               annotation_col    = ann_c,
+               annotation_colors = ann_colors_c,
+               legend_breaks = ticks_c,
+               legend_labels = sprintf("%.1f", ticks_c),
+               main = sprintf("Heatmap top %d en %s vs %s\n", n_top_hm, contr_2c, contr_1c),
+               fontsize_col = 10, treeheight_row = 30, treeheight_col = 30)
+      
+      #### Barplot (B vs C):  -----------------------------
+      # número de DEGs por dirección
+      lab_up_c   <- paste0("up in ",   contr_2c)
+      lab_down_c <- paste0("down in ", contr_2c)
+      
+      tmp_c <- within(resdf_c, {
+        sig <- !is.na(padj) & (padj < alpha_padj) & (abs(log2FoldChange) >= lfc_thr)
+        direction <- ifelse(log2FoldChange > 0, lab_up_c,
+                            ifelse(log2FoldChange < 0, lab_down_c, NA))
+      })
+      bar_df_c <- as.data.frame(table(tmp_c$direction[tmp_c$sig]))
+      names(bar_df_c) <- c("dir", "n")
+      bar_df_c$dir <- factor(bar_df_c$dir, levels = c(lab_up_c, lab_down_c))
+      
+      cols_bar_c <- setNames(c("#a5923d", "#aa4d6f"), c(lab_up_c, lab_down_c))
+      
+      if (nrow(bar_df_c) > 0) {
+        ggplot(bar_df_c, aes(x = dir, y = n, fill = dir)) +
+          geom_col(width = 0.65) +
+          geom_text(aes(label = n), vjust = -0.35, size = 4) +
+          scale_fill_manual(values = cols_bar_c, guide = "none") +
+          labs(title    = paste0("DEGs por dirección (", contr_2c, " vs ", contr_1c, ")"),
+               subtitle = paste0("padj < ", alpha_padj, "  &  (log2FC ≥ ", lfc_thr, ")"),
+               x = paste0("Dirección (respecto a ", contr_2c, ")"),
+               y = "Número de genes") +
+          ylim(0, max(bar_df_c$n) * 1.15) +
+          theme_classic(base_size = 12) +
+          theme(plot.title    = element_text(hjust = 0.5, face = "bold"),
+                plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"),
+                axis.text     = element_text(size = 10),
+                axis.title    = element_text(size = 12))
+      } else {
+        message("No hay DEGs con los umbrales (padj & log2FC) para el barplot (B vs C).")
+      }
+      
+      
+      
+      
+      
+      # NEURONS B/A-------------
+      ##  Etiquetas del contraste (B/A) 
+      # bloque de “ENRIQ… B/A” ya definimos:
+      # contr_1a <- AAA  # A (denominador)
+      # contr_2a <- BBB  # B (numerador)
+      tag_a <- paste0(contr_2a, "_vs_", contr_1a)   # "B_vs_A"
+      
+      ##  0) Máscara de DEGs por FDR 
+      alpha_a   <- 0.05
+      padj_a    <- res_a$padj
+      padj_a[is.na(padj_a)] <- 1
+      deg_mask_a <- padj_a < alpha_a
+      
+      cat("N NAs en res_a$padj:", sum(is.na(res_a$padj)), "\n")
+      cat(tag_a, "DEGs at FDR <", alpha_a, ": ", sum(deg_mask_a), "\n")
+      
+      if (!any(deg_mask_a)) stop("No DEGs at FDR <", alpha_a, " en ", tag_a)
+      
+      ## 1) FPM normalizados de ESTE dds (a) 
+      fpm_norm_a <- fpm(dds_a)                                   # genes x muestras
+      DEG_cpm_a  <- fpm_norm_a[deg_mask_a, , drop = FALSE]
+      cat("[", tag_a, "] DEG_cpm_a:", nrow(DEG_cpm_a), "genes x", ncol(DEG_cpm_a), "muestras\n")
+      
+      ## 2) log2(+1) 
+      log2_deg_a <- log2(DEG_cpm_a + 1)
+      
+      ## 3) z-score por gen 
+      cs.log2_a <- t(scale(t(log2_deg_a)))
+      
+      ## 4) checks 
+      stopifnot(all(is.finite(cs.log2_a)))
+      stopifnot(identical(colnames(cs.log2_a), rownames(coldata_a)))
+      cat("z-score range (", tag_a, "): [",
+          round(min(cs.log2_a),2), ", ", round(max(cs.log2_a),2), "]\n", sep="")
+      
+      ## (opcional) guardado
+      # write.csv(as.data.frame(DEG_cpm_a), file=paste0("DEGs_FPMnorm_", tag_a, ".csv"))
+      # write.csv(as.data.frame(cs.log2_a), file=paste0("DEGs_log2p1_zscore_", tag_a, ".csv"))
+      
+      
+      
+      ### SOMs B/A ----------
+      #Self-Organizing Map 
+      
+      
+      ## 1) Sanity check
+      stopifnot(exists("cs.log2_a"), nrow(cs.log2_a) > 0)
+      head(cs.log2_a)
+      
+      ## 2) Fijar aleatoriedad
+      set.seed(42)
+      
+      ## 3) Definición de la grilla
+      som_grid_axes_a <- 3
+      som_grid_a <- kohonen::somgrid(xdim = som_grid_axes_a,
+                                     ydim = som_grid_axes_a,
+                                     topo = "hexagonal",
+                                     toroidal = TRUE)
+      
+      ## 4) Entrenamiento del SOM
+      som_fit_a <- kohonen::som(
+        as.matrix(cs.log2_a),
+        grid      = som_grid_a,
+        rlen      = 200,
+        keep.data = TRUE
+      )
+      
+      ## 5) Clasificación de genes y codebooks
+      classif_a <- som_fit_a$unit.classif
+      names(classif_a) <- rownames(cs.log2_a)
+      codes_a <- som_fit_a$codes[[1]]   # neuronas × muestras
+      
+      ## 6) 
+      ### Plots rápidos del SOM
+      plot(som_fit_a,                          main = paste0("SOM – Codebook vectors at ",   tag_a))
+      plot(som_fit_a, type = "mapping",        main = paste0("SOM – Mapping at ",            tag_a), pch = ".")
+      plot(som_fit_a, type = "changes",        main = paste0("SOM – Training at ",           tag_a), pch = ".")
+      plot(som_fit_a, type = "counts",         main = paste0("SOM – Genes per neuron at ",   tag_a), pch = ".")
+      plot(som_fit_a, type = "dist.neighbours",main = paste0("SOM – U-matrix at ",           tag_a), pch = ".")
+      plot(som_fit_a, type = "quality",        main = paste0("SOM – Quantization error at ", tag_a), pch = ".")
+      
+      
+      
+      ### Heatmaps SOMs & Cluster codebooks B/A ------
+      
+      
+      ## 0) Alias de metadatos (para no pisar objetos)
+      coldata_a2 <- coldata_a
+      coldata_a2$Group <- droplevels(coldata_a2$Group)
+      
+      if (!exists("pal_grupo")) pal_grupo <- c(A="#fdac4f", B="#a2593d", C="#3d6863")
+      pal_a <- pal_grupo[levels(coldata_a2$Group)]
+      
+      ## 1) Alinear columnas de codes con coldata_a2
+      stopifnot(all(colnames(codes_a) %in% rownames(coldata_a2)))
+      codes_a <- codes_a[, rownames(coldata_a2), drop = FALSE]
+      stopifnot(identical(colnames(codes_a), rownames(coldata_a2)))
+      
+      ## 2) Clustering de muestras y neuronas
+      clust.sample_a <- hclust(dist(t(codes_a), method = "euclidean"),  method = "ward.D2")
+      clust.neuron_a <- hclust(dist(codes_a,   method = "manhattan"),   method = "ward.D2")
+      
+      ## 3) Anotación de filas (muestras) + colores
+      ann_row_a <- data.frame(Group = coldata_a2$Group, row.names = rownames(coldata_a2))
+      ann_colors_row_a <- list(Group = pal_a)
+      
+      
+      # 1) Colores extremos (ajústalos si quieres)
+      col_neg_a <- "#aa4d6f"  # morado (menor que la media de su gen)
+      col_pos_a <- "#a5923d"  # verde (mayor que la media de su gen)
+      
+      # 2) Matriz VST normalizada + centrado por gen (z-score por fila sin escalar sd)
+      mat_a0 <- normcounts_a[top_a, , drop = FALSE]
+      mat_a  <- mat_a0 - rowMeans(mat_a0)
+      
+      # 2) Degradado (blanco en 0 para que el centro sea neutro)
+      nbreaks_a <- 256
+      lim_a     <- max(abs(mat_a))  # simétrico alrededor de 0
+      breaks_a  <- seq(-lim_a, lim_a, length.out = nbreaks_a)
+      hm_cols_a <- colorRampPalette(c(col_neg_a, "#f7efe6", col_pos_a))(nbreaks_a - 1)
+      
+      # 3) Ticks de la barra de color (leyenda de la escala)
+      ticks_a <- pretty(c(-lim_a, lim_a), n = 5)
+      
+      
+      #### Heatmap 1 (samples × neurons) -------
+      pheatmap(t(codes_a),
+               color = hm_cols_a, breaks = breaks_a,
+               border_color  = "grey60",
+               scale         = "column",
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample_a,  cutree_rows = 2,
+               annotation_row = ann_row_a,
+               cluster_cols  = clust.neuron_a,  cutree_cols = 3,
+               annotation_colors = ann_colors_row_a,
+               legend_breaks = ticks_a,
+               legend_labels = sprintf("%.1f", ticks_a),
+               main = paste0("SOM codebooks — samples × neurons (", tag_a, ")"))
+      
+      ## 5) Clusters de neuronas
+      k_neuron_a  <- 3
+      clust.pat_a <- cutree(clust.neuron_a, k = k_neuron_a)
+      clust.aux_a <- paste0("C", clust.pat_a); names(clust.aux_a) <- names(clust.pat_a)
+      
+      ## 6) Anotación de columnas (neurons)
+      ann_col_a <- data.frame(Pattern = clust.aux_a, row.names = names(clust.aux_a))
+      
+      ## 7) Paleta para los clusters de neuronas
+      pal_nc_a <- colorRampPalette(brewer.pal(8, "Accent"))(k_neuron_a)
+      names(pal_nc_a) <- paste0("C", seq_len(k_neuron_a))
+      
+      ## 8) Colores combinados
+      ann_colors_a <- list(Group = pal_a, Pattern = pal_nc_a)
+      
+      ## 9) Forzar niveles
+      ann_col_a$Pattern <- factor(ann_col_a$Pattern, levels = names(ann_colors_a$Pattern))
+      
+      #### Heatmap 2 clusters de neuronas ----
+      pheatmap(t(codes_a),
+               color = hm_cols_a, breaks = breaks_a,
+               border_color  = "grey60",
+               scale         = "column",
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample_a,  cutree_rows = 2,
+               annotation_row = ann_row_a,
+               cluster_cols  = clust.neuron_a,  cutree_cols = k_neuron_a,
+               annotation_col = ann_col_a,
+               annotation_colors = ann_colors_a,
+               legend_breaks = ticks_a,
+               legend_labels = sprintf("%.1f", ticks_a),
+               main = paste0("SOM codebooks — with neuron clusters (", tag_a, ")"))
+      
+      ## 11) Gene → cluster de neurona
+      type.pattern_a <- clust.pat_a[classif_a]
+      names(type.pattern_a) <- names(classif_a)
+      cat("Genes per neuron cluster (", tag_a, "):\n", sep = ""); print(table(type.pattern_a))
+      
+      ## (opcional) export
+      # write.csv(codes_a, file = paste0("SOM_codebooks_neuron_by_sample_", tag_a, ".csv"))
+      # write.csv(data.frame(gene = names(type.pattern_a),
+      #                      neuron_cluster = paste0("C", type.pattern_a)),
+      #           file = paste0("genes_to_SOM_clusters_", tag_a, ".csv"), row.names = FALSE)
+      
+      
+      
+      
+      
+      
+      # NEURONS A/C-------------
+      ##  Etiquetas del contraste (A/C)
+      # Deben existir de tu bloque “ENRIQ… A/C”:
+      # contr_1b <- CCC  # C (denominador / Control)
+      # contr_2b <- AAA  # A (numerador)
+      tag_b <- paste0(contr_2b, "_vs_", contr_1b)   # "A_vs_C"
+      
+      ##  0) Máscara de DEGs por FDR
+      alpha_b   <- 0.05
+      padj_b    <- res_b$padj
+      padj_b[is.na(padj_b)] <- 1
+      deg_mask_b <- padj_b < alpha_b
+      
+      cat("N NAs en res_b$padj:", sum(is.na(res_b$padj)), "\n")
+      cat(tag_b, "DEGs at FDR <", alpha_b, ": ", sum(deg_mask_b), "\n")
+      if (!any(deg_mask_b)) stop("No DEGs at FDR <", alpha_b, " en ", tag_b)
+      
+      ## 1) FPM normalizados de ESTE dds (b)
+      fpm_norm_b <- fpm(dds_b)                                   # genes x muestras
+      DEG_cpm_b  <- fpm_norm_b[deg_mask_b, , drop = FALSE]
+      cat("[", tag_b, "] DEG_cpm_b:", nrow(DEG_cpm_b), "genes x", ncol(DEG_cpm_b), "muestras\n")
+      
+      ## 2) log2(+1)
+      log2_deg_b <- log2(DEG_cpm_b + 1)
+      
+      ## 3) z-score por gen
+      cs.log2_b <- t(scale(t(log2_deg_b)))
+      
+      ## 4) checks
+      stopifnot(all(is.finite(cs.log2_b)))
+      stopifnot(identical(colnames(cs.log2_b), rownames(coldata_b)))
+      cat("z-score range (", tag_b, "): [",
+          round(min(cs.log2_b),2), ", ", round(max(cs.log2_b),2), "]\n", sep="")
+      
+      ## (opcional) guardado
+      # write.csv(as.data.frame(DEG_cpm_b), file=paste0("DEGs_FPMnorm_", tag_b, ".csv"))
+      # write.csv(as.data.frame(cs.log2_b), file=paste0("DEGs_log2p1_zscore_", tag_b, ".csv"))
+      
+      
+      ### SOMs A/C ----------
+      ## 1) Sanity check
+      stopifnot(exists("cs.log2_b"), nrow(cs.log2_b) > 0)
+      
+      ## 2) Fijar aleatoriedad
+      set.seed(42)
+      
+      ## 3) Definición de la grilla
+      som_grid_axes_b <- 3
+      som_grid_b <- kohonen::somgrid(xdim = som_grid_axes_b,
+                                     ydim = som_grid_axes_b,
+                                     topo = "hexagonal",
+                                     toroidal = TRUE)
+      
+      ## 4) Entrenamiento del SOM
+      som_fit_b <- kohonen::som(
+        as.matrix(cs.log2_b),
+        grid      = som_grid_b,
+        rlen      = 200,
+        keep.data = TRUE
+      )
+      
+      ## 5) Clasificación de genes y codebooks
+      classif_b <- som_fit_b$unit.classif
+      names(classif_b) <- rownames(cs.log2_b)
+      codes_b <- som_fit_b$codes[[1]]   # neuronas × muestras
+      
+      ## 6) Plots rápidos del SOM
+      plot(som_fit_b,                           main = paste0("SOM – Codebook vectors at ",   tag_b))
+      plot(som_fit_b, type = "mapping",         main = paste0("SOM – Mapping at ",            tag_b), pch = ".")
+      plot(som_fit_b, type = "changes",         main = paste0("SOM – Training at ",           tag_b), pch = ".")
+      plot(som_fit_b, type = "counts",          main = paste0("SOM – Genes per neuron at ",   tag_b), pch = ".")
+      plot(som_fit_b, type = "dist.neighbours", main = paste0("SOM – U-matrix at ",           tag_b), pch = ".")
+      plot(som_fit_b, type = "quality",         main = paste0("SOM – Quantization error at ", tag_b), pch = ".")
+      
+      
+      ### Heatmaps SOMs & Cluster codebooks A/C ------
+      ## 0) Alias de metadatos (para no pisar objetos)
+      coldata_b2 <- coldata_b
+      coldata_b2$Group <- droplevels(coldata_b2$Group)
+      
+      # Paleta global (incluye Control)
+      if (!exists("pal_grupo")) pal_grupo <- c(A="#fdac4f", B="#a2593d", C="#3d6863")
+      pal_b <- pal_grupo[levels(coldata_b2$Group)]
+      
+      ## 1) Alinear columnas de codes con coldata_b2
+      stopifnot(all(colnames(codes_b) %in% rownames(coldata_b2)))
+      codes_b <- codes_b[, rownames(coldata_b2), drop = FALSE]
+      stopifnot(identical(colnames(codes_b), rownames(coldata_b2)))
+      
+      ## 2) Clustering de muestras y neuronas
+      clust.sample_b <- hclust(dist(t(codes_b), method = "euclidean"),  method = "ward.D2")
+      clust.neuron_b <- hclust(dist(codes_b,   method = "manhattan"),   method = "ward.D2")
+      
+      ## 3) Anotación de filas (muestras) + colores
+      ann_row_b <- data.frame(Group = coldata_b2$Group, row.names = rownames(coldata_b2))
+      ann_colors_row_b <- list(Group = pal_b)
+      
+      # Colores para gradiente (mismo estilo que ‘a’)
+      col_neg_b <- "#aa4d6f"
+      col_pos_b <- "#a5923d"
+      nbreaks_b <- 256
+      lim_b     <- 3                   # z-score ~ [-3, 3] tras 'scale="column"'
+      breaks_b  <- seq(-lim_b, lim_b, length.out = nbreaks_b)
+      hm_cols_b <- colorRampPalette(c(col_neg_b, "#f7efe6", col_pos_b))(nbreaks_b - 1)
+      ticks_b   <- pretty(c(-lim_b, lim_b), n = 5)
+      
+      #### Heatmap 1 (samples × neurons) -------
+      pheatmap(t(codes_b),
+               color = hm_cols_b, breaks = breaks_b,
+               border_color  = "grey60",
+               scale         = "column",
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample_b,  cutree_rows = 2,
+               annotation_row = ann_row_b,
+               cluster_cols  = clust.neuron_b,  cutree_cols = 3,
+               annotation_colors = ann_colors_row_b,
+               legend_breaks = ticks_b,
+               legend_labels = sprintf("%.1f", ticks_b),
+               main = paste0("SOM codebooks — samples × neurons (", tag_b, ")"))
+      
+      ## 5) Clusters de neuronas
+      k_neuron_b  <- 3
+      clust.pat_b <- cutree(clust.neuron_b, k = k_neuron_b)
+      clust.aux_b <- paste0("C", clust.pat_b); names(clust.aux_b) <- names(clust.pat_b)
+      
+      ## 6) Anotación de columnas (neurons)
+      ann_col_b <- data.frame(Pattern = clust.aux_b, row.names = names(clust.aux_b))
+      
+      ## 7) Paleta para los clusters de neuronas
+      pal_nc_b <- colorRampPalette(brewer.pal(8, "Accent"))(k_neuron_b)
+      names(pal_nc_b) <- paste0("C", seq_len(k_neuron_b))
+      
+      ## 8) Colores combinados
+      ann_colors_b <- list(Group = pal_b, Pattern = pal_nc_b)
+      
+      ## 9) Forzar niveles
+      ann_col_b$Pattern <- factor(ann_col_b$Pattern, levels = names(ann_colors_b$Pattern))
+      
+      #### Heatmap 2 clusters de neuronas ----
+      pheatmap(t(codes_b),
+               color = hm_cols_b, breaks = breaks_b,
+               border_color  = "grey60",
+               scale         = "column",
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample_b,  cutree_rows = 2,
+               annotation_row = ann_row_b,
+               cluster_cols  = clust.neuron_b,  cutree_cols = k_neuron_b,
+               annotation_col = ann_col_b,
+               annotation_colors = ann_colors_b,
+               legend_breaks = ticks_b,
+               legend_labels = sprintf("%.1f", ticks_b),
+               main = paste0("SOM codebooks — with neuron clusters (", tag_b, ")"))
+      
+      ## 11) Gene → cluster de neurona
+      type.pattern_b <- clust.pat_b[classif_b]
+      names(type.pattern_b) <- names(classif_b)
+      cat("Genes per neuron cluster (", tag_b, "):\n", sep = ""); print(table(type.pattern_b))
+      
+      
+      
+      
+      
+      
+      
+      # NEURONS B/C-------------
+      ##  Etiquetas del contraste (B/C)
+      # Deben existir de tu bloque “ENRIQ… B/C”:
+      # contr_1c <- CCC  # C (denominador / Control)
+      # contr_2c <- BBB  # B (numerador)
+      tag_c <- paste0(contr_2c, "_vs_", contr_1c)   # "B_vs_C"
+      
+      ##  0) Máscara de DEGs por FDR
+      alpha_c   <- 0.05
+      padj_c    <- res_c$padj
+      padj_c[is.na(padj_c)] <- 1
+      deg_mask_c <- padj_c < alpha_c
+      
+      cat("N NAs en res_c$padj:", sum(is.na(res_c$padj)), "\n")
+      cat(tag_c, "DEGs at FDR <", alpha_c, ": ", sum(deg_mask_c), "\n")
+      if (!any(deg_mask_c)) stop("No DEGs at FDR <", alpha_c, " en ", tag_c)
+      
+      ## 1) FPM normalizados de ESTE dds (c)
+      fpm_norm_c <- fpm(dds_c)                                   # genes x muestras
+      DEG_cpm_c  <- fpm_norm_c[deg_mask_c, , drop = FALSE]
+      cat("[", tag_c, "] DEG_cpm_c:", nrow(DEG_cpm_c), "genes x", ncol(DEG_cpm_c), "muestras\n")
+      
+      ## 2) log2(+1)
+      log2_deg_c <- log2(DEG_cpm_c + 1)
+      
+      ## 3) z-score por gen
+      cs.log2_c <- t(scale(t(log2_deg_c)))
+      
+      ## 4) checks
+      stopifnot(all(is.finite(cs.log2_c)))
+      stopifnot(identical(colnames(cs.log2_c), rownames(coldata_c)))
+      cat("z-score range (", tag_c, "): [",
+          round(min(cs.log2_c),2), ", ", round(max(cs.log2_c),2), "]\n", sep="")
+      
+      ## (opcional) guardado
+      # write.csv(as.data.frame(DEG_cpm_c), file=paste0("DEGs_FPMnorm_", tag_c, ".csv"))
+      # write.csv(as.data.frame(cs.log2_c), file=paste0("DEGs_log2p1_zscore_", tag_c, ".csv"))
+      
+      
+      ### SOMs B/C ----------
+      ## 1) Sanity check
+      stopifnot(exists("cs.log2_c"), nrow(cs.log2_c) > 0)
+      
+      ## 2) Fijar aleatoriedad
+      set.seed(42)
+      
+      ## 3) Definición de la grilla
+      som_grid_axes_c <- 3
+      som_grid_c <- kohonen::somgrid(xdim = som_grid_axes_c,
+                                     ydim = som_grid_axes_c,
+                                     topo = "hexagonal",
+                                     toroidal = TRUE)
+      
+      ## 4) Entrenamiento del SOM
+      som_fit_c <- kohonen::som(
+        as.matrix(cs.log2_c),
+        grid      = som_grid_c,
+        rlen      = 200,
+        keep.data = TRUE
+      )
+      
+      ## 5) Clasificación de genes y codebooks
+      classif_c <- som_fit_c$unit.classif
+      names(classif_c) <- rownames(cs.log2_c)
+      codes_c <- som_fit_c$codes[[1]]   # neuronas × muestras
+      
+      ## 6) Plots rápidos del SOM
+      plot(som_fit_c,                           main = paste0("SOM – Codebook vectors at ",   tag_c))
+      plot(som_fit_c, type = "mapping",         main = paste0("SOM – Mapping at ",            tag_c), pch = ".")
+      plot(som_fit_c, type = "changes",         main = paste0("SOM – Training at ",           tag_c), pch = ".")
+      plot(som_fit_c, type = "counts",          main = paste0("SOM – Genes per neuron at ",   tag_c), pch = ".")
+      plot(som_fit_c, type = "dist.neighbours", main = paste0("SOM – U-matrix at ",           tag_c), pch = ".")
+      plot(som_fit_c, type = "quality",         main = paste0("SOM – Quantization error at ", tag_c), pch = ".")
+      
+      
+      ### Heatmaps SOMs & Cluster codebooks B/C ------
+      ## 0) Alias de metadatos (para no pisar objetos)
+      coldata_c2 <- coldata_c
+      coldata_c2$Group <- droplevels(coldata_c2$Group)
+      
+      # Paleta global (incluye Control)
+      if (!exists("pal_grupo")) pal_grupo <- c(A="#fdac4f", B="#a2593d", C="#3d6863")
+      pal_c <- pal_grupo[levels(coldata_c2$Group)]
+      
+      ## 1) Alinear columnas de codes con coldata_c2
+      stopifnot(all(colnames(codes_c) %in% rownames(coldata_c2)))
+      codes_c <- codes_c[, rownames(coldata_c2), drop = FALSE]
+      stopifnot(identical(colnames(codes_c), rownames(coldata_c2)))
+      
+      ## 2) Clustering de muestras y neuronas
+      clust.sample_c <- hclust(dist(t(codes_c), method = "euclidean"),  method = "ward.D2")
+      clust.neuron_c <- hclust(dist(codes_c,   method = "manhattan"),   method = "ward.D2")
+      
+      ## 3) Anotación de filas (muestras) + colores
+      ann_row_c <- data.frame(Group = coldata_c2$Group, row.names = rownames(coldata_c2))
+      ann_colors_row_c <- list(Group = pal_c)
+      
+      # Colores para gradiente
+      col_neg_c <- "#aa4d6f"
+      col_pos_c <- "#a5923d"
+      nbreaks_c <- 256
+      lim_c     <- 3
+      breaks_c  <- seq(-lim_c, lim_c, length.out = nbreaks_c)
+      hm_cols_c <- colorRampPalette(c(col_neg_c, "#f7efe6", col_pos_c))(nbreaks_c - 1)
+      ticks_c   <- pretty(c(-lim_c, lim_c), n = 5)
+      
+      #### Heatmap 1 (samples × neurons) -------
+      pheatmap(t(codes_c),
+               color = hm_cols_c, breaks = breaks_c,
+               border_color  = "grey60",
+               scale         = "column",
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample_c,  cutree_rows = 2,
+               annotation_row = ann_row_c,
+               cluster_cols  = clust.neuron_c,  cutree_cols = 3,
+               annotation_colors = ann_colors_row_c,
+               legend_breaks = ticks_c,
+               legend_labels = sprintf("%.1f", ticks_c),
+               main = paste0("SOM codebooks — samples × neurons (", tag_c, ")"))
+      
+      ## 5) Clusters de neuronas
+      k_neuron_c  <- 3
+      clust.pat_c <- cutree(clust.neuron_c, k = k_neuron_c)
+      clust.aux_c <- paste0("C", clust.pat_c); names(clust.aux_c) <- names(clust.pat_c)
+      
+      ## 6) Anotación de columnas (neurons)
+      ann_col_c <- data.frame(Pattern = clust.aux_c, row.names = names(clust.aux_c))
+      
+      ## 7) Paleta para los clusters de neuronas
+      pal_nc_c <- colorRampPalette(brewer.pal(8, "Accent"))(k_neuron_c)
+      names(pal_nc_c) <- paste0("C", seq_len(k_neuron_c))
+      
+      ## 8) Colores combinados
+      ann_colors_c <- list(Group = pal_c, Pattern = pal_nc_c)
+      
+      ## 9) Forzar niveles
+      ann_col_c$Pattern <- factor(ann_col_c$Pattern, levels = names(ann_colors_c$Pattern))
+      
+      #### Heatmap 2 clusters de neuronas ----
+      pheatmap(t(codes_c),
+               color = hm_cols_c, breaks = breaks_c,
+               border_color  = "grey60",
+               scale         = "column",
+               show_rownames = TRUE,
+               show_colnames = FALSE,
+               cluster_rows  = clust.sample_c,  cutree_rows = 2,
+               annotation_row = ann_row_c,
+               cluster_cols  = clust.neuron_c,  cutree_cols = k_neuron_c,
+               annotation_col = ann_col_c,
+               annotation_colors = ann_colors_c,
+               legend_breaks = ticks_c,
+               legend_labels = sprintf("%.1f", ticks_c),
+               main = paste0("SOM codebooks — with neuron clusters (", tag_c, ")"))
+      
+      ## 11) Gene → cluster de neurona
+      type.pattern_c <- clust.pat_c[classif_c]
+      names(type.pattern_c) <- names(classif_c)
+      cat("Genes per neuron cluster (", tag_c, "):\n", sep = ""); print(table(type.pattern_c))
+      
+      
+      
+      
+      
+      
+      # PATHWAYS --------------------------
+      
+      
+      # (B vs A, log2FC = B/A) --------------------------------------
+      # Requisitos ya creados:
+      # contr_1a == "A" (denominador), contr_2a == "B" (numerador)
+      # res_a (DESeqResults), vst_a (DESeqTransform), coldata_a (niveles A/B)
+      # enriched.FDR_a[["KEGG_Pathway"]], annotation (con columna "KEGG_Pathway")
+      
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      pal_grupo <- if (exists("pal_grupo")) pal_grupo else c(A="#fdac4f", B="#a2593d", Control="#3d6863")
+      cols_dir_a <- c("down"="#aa4d6f", "up"="#a5923d")  # colores por dirección
+      col_neg_a  <- "#aa4d6f";  col_pos_a <- "#a5923d"   # extremos heatmap
+      
+      # Filtros opcionales de rutas (deja NULL / character(0) si no quieres filtrar)
+      keep_paths_a <- NULL
+      drop_paths_a <- character(0)
+      
+      # --- 1) DEGs y FDR por pathway
+      resdf_a     <- as.data.frame(res_a)
+      deg_mask_a  <- !is.na(resdf_a$padj) & resdf_a$padj < alpha_padj
+      deg_genes_a <- rownames(resdf_a)[deg_mask_a]
+      
+      fdr_path_a <- enriched.FDR_a[["KEGG_Pathway"]]
+      stopifnot(!is.null(fdr_path_a))
+      
+      sig_paths_all_a <- names(fdr_path_a)[fdr_path_a < alpha_padj]
+      sig_paths_all_a <- sub("^ko", "map", sig_paths_all_a)
+      sig_paths_all_a <- sig_paths_all_a[!duplicated(sig_paths_all_a)]
+      
+      sig_paths_a <- sig_paths_all_a
+      if (!is.null(keep_paths_a)) sig_paths_a <- intersect(sig_paths_a, keep_paths_a)
+      if (length(drop_paths_a))   sig_paths_a <- setdiff(sig_paths_a, drop_paths_a)
+      
+      if (length(sig_paths_a) == 0) {
+        message("[B_vs_A] No hay pathways enriquecidos (o fueron filtrados).")
+      } else {
+        
+        # --- 2) ruta -> genes DEG de esa ruta
+        path2genes_a <- setNames(vector("list", length(sig_paths_a)), sig_paths_a)
+        for (p in sig_paths_a) {
+          idx <- grep(p, annotation[,"KEGG_Pathway"], fixed = TRUE)
+          g   <- intersect(rownames(annotation)[idx], deg_genes_a)
+          path2genes_a[[p]] <- g
+        }
+        
+        # --- 3) resumen por ruta + dirección por mediana(LFC)
+        lfc_a <- resdf_a$log2FoldChange; names(lfc_a) <- rownames(resdf_a)
+        
+        path_summary_a <- do.call(rbind, lapply(names(path2genes_a), function(p){
+          g <- path2genes_a[[p]]
+          if (length(g) == 0) return(NULL)
+          lfc_g <- lfc_a[g]
+          data.frame(
+            pathway    = p,
+            FDR        = unname(fdr_path_a[p]),
+            n_genes    = length(g),
+            n_up       = sum(lfc_g >=  lfc_thr, na.rm=TRUE),
+            n_down     = sum(lfc_g <= -lfc_thr, na.rm=TRUE),
+            median_lfc = stats::median(lfc_g, na.rm=TRUE),
+            dir_lab    = ifelse(stats::median(lfc_g, na.rm=TRUE) > 0, "up", "down"),
+            stringsAsFactors = FALSE
+          )
+        }))
+        rownames(path_summary_a) <- NULL
+        
+        ### Dotplot ---------------------------------
+        path_summary_a$base_id <- sub("^ko", "map", path_summary_a$pathway)
+        pth_a <- path_summary_a[!duplicated(path_summary_a$base_id), ]
+        pth_a$mlogFDR <- -log10(pth_a$FDR)
+        
+        dotp_a <- ggplot(pth_a,
+                         aes(x = mlogFDR, y = reorder(base_id, mlogFDR),
+                             size = n_genes, color = dir_lab)) +
+          geom_point() +
+          scale_color_manual(limits = c("down","up"),
+                             values = cols_dir_a,
+                             name = "Dirección (median LFC)") +
+          scale_size_area(max_size = 9, name = "DEGs en ruta") +
+          labs(title = "Pathways enriquecidos (B vs A)",
+               subtitle = sprintf("FDR < %.2f  •  color = dirección por mediana(log2FC)", alpha_padj),
+               x = expression(-log[10]("FDR")), y = NULL) +
+          theme_classic(base_size = 12) +
+          theme(plot.title = element_text(hjust = .5, face = "bold"),
+                plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"))
+        dotp_a
+        
+        # Heatmaps por pathway ----------------------------
+        # (DEGs centrados por gen)
+        ann_a <- data.frame(Group = coldata_a$Group, row.names = rownames(coldata_a))
+        ann_a$Group <- factor(as.character(ann_a$Group), levels = c(contr_1a, contr_2a))  # A, B
+        ann_colors_a <- list(Group = pal_grupo[levels(ann_a$Group)])
+        
+        nbreaks_a <- 256
+        make_hm_a <- function(p){
+          g <- path2genes_a[[p]]
+          if (length(g) < 2) { message("Ruta con <2 genes DEG: ", p); return(invisible(NULL)) }
+          m0 <- assay(vst_a)[g, , drop=FALSE]
+          m  <- m0 - rowMeans(m0)               # centrar por gen (patrón)
+          lim <- max(abs(m))
+          brk <- seq(-lim, lim, length.out = nbreaks_a)
+          cols <- colorRampPalette(c(col_neg_a, "#f7efe6", col_pos_a))(nbreaks_a - 1)
+          
+          pheatmap::pheatmap(m, color = cols, breaks = brk,
+                             scale="none", border_color=NA,
+                             clustering_distance_rows="euclidean",
+                             clustering_distance_cols="correlation",
+                             clustering_method="ward.D2",
+                             show_rownames=FALSE, show_colnames=TRUE,
+                             annotation_col=ann_a, annotation_colors=ann_colors_a,
+                             main=paste0("Heatmap (DEGs) — ", p, "  [B vs A]"),
+                             fontsize_col=10, treeheight_row=30, treeheight_col=30)
+        }
+        
+        sig_to_plot_a <- pth_a$pathway
+        invisible(lapply(sig_to_plot_a, make_hm_a))
+      }
+      
+      
+      
+      # (A vs C, log2FC = A/C) -----------
+      
+      # Requisitos ya creados en tus bloques previos:
+      # contr_1b == "C" (denominador), contr_2b == "A" (numerador)
+      # res_b (DESeqResults), vst_b (DESeqTransform), coldata_b (Group con niveles C/A)
+      # enriched.FDR_b (lista con "KEGG_Pathway"), annotation (con columna "KEGG_Pathway")
+      
+      # 0) Parámetros y helpers
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      # Paletas (consistentes con lo previo)
+      pal_grupo <- if (exists("pal_grupo")) pal_grupo else c(A="#fdac4f", B="#a2593d", Control="#3d6863")
+      cols_dir_b <- c("down"="#aa4d6f", "up"="#a5923d")  # para dirección de ruta
+      col_neg_b  <- "#aa4d6f";  col_pos_b <- "#a5923d"   # extremos del heatmap
+      
+      # Vectores de filtro opcional (si no quieres filtrar, déjalos como están)
+      keep_paths_b <- NULL                 # p.ej.: c("Phenylpropanoid biosynthesis", "MAPK signaling pathway - plant")
+      drop_paths_b <- character(0)         # p.ej.: c("Quorum sensing","Biofilm formation")
+      
+      # --- 1) Conjunto de DEGs y objetos base
+      resdf_b <- as.data.frame(res_b)
+      deg_mask_b <- !is.na(resdf_b$padj) & resdf_b$padj < alpha_padj
+      deg_genes_b <- rownames(resdf_b)[deg_mask_b]
+      
+      # FDR por pathway (del bloque de enriquecimiento)
+      fdr_path_b <- enriched.FDR_b[["KEGG_Pathway"]]
+      stopifnot(!is.null(fdr_path_b))
+      
+      sig_paths_all_b <- names(fdr_path_b)[fdr_path_b < alpha_padj]
+      sig_paths_all_b <- sub("^ko", "map", sig_paths_all_b)
+      sig_paths_all_b <- sig_paths_all_b[!duplicated(sig_paths_all_b)]
+      
+      # Aplicar filtros opcionales (no filtra si keep=NULL y drop=vacío)
+      sig_paths_b <- sig_paths_all_b
+      
+      if (!is.null(keep_paths_b)) sig_paths_b <- intersect(sig_paths_b, keep_paths_b)
+      if (length(drop_paths_b))   sig_paths_b <- setdiff(sig_paths_b, drop_paths_b)
+      
+      #Path_summary_b
+      if (length(sig_paths_b) == 0) {
+        message(sprintf("[A_vs_C] No hay pathways enriquecidos (o fueron filtrados)."))
+      } else {
+        
+        # --- 2) Mapeo ruta -> genes DEG de esa ruta
+        # Usamos coincidencia por texto como en tu enriquecimiento (grep sobre annotation$KEGG_Pathway)
+        path2genes_b <- setNames(vector("list", length(sig_paths_b)), sig_paths_b)
+        for (p in sig_paths_b) {
+          idx <- grep(p, annotation[,"KEGG_Pathway"], fixed = TRUE)
+          g   <- intersect(rownames(annotation)[idx], deg_genes_b)
+          path2genes_b[[p]] <- g
+        }
+        
+        # --- 3) Resumen por ruta: dirección, tamaños, FDR
+        lfc_b <- resdf_b$log2FoldChange; names(lfc_b) <- rownames(resdf_b)
+        
+        path_summary_b <- do.call(rbind, lapply(names(path2genes_b), function(p){
+          g <- path2genes_b[[p]]
+          if (length(g) == 0) return(NULL)
+          lfc_g <- lfc_b[g]
+          n_up   <- sum(lfc_g >=  lfc_thr, na.rm=TRUE)
+          n_down <- sum(lfc_g <= -lfc_thr, na.rm=TRUE)
+          data.frame(
+            pathway    = p,
+            FDR        = unname(fdr_path_b[p]),
+            n_genes    = length(g),
+            n_up       = n_up,
+            n_down     = n_down,
+            median_lfc = stats::median(lfc_g, na.rm=TRUE),
+            dir_lab    = ifelse(stats::median(lfc_g, na.rm=TRUE) > 0, "up", "down"),
+            stringsAsFactors = FALSE
+          )
+        }))
+        rownames(path_summary_b) <- NULL
+        
+        # --- 4) 
+        ### Dotplot ---------------------------
+        # (enriquecimiento con dirección
+        
+        path_summary_b$base_id <- sub("^ko", "map", path_summary_b$pathway)  # añade esta columna a tu tabla de rutas
+        pth_b_nodup   <- path_summary_b[!duplicated(path_summary_b$base_id), ]  # una por ruta
+        
+      
+        
+        pth_b_nodup$mlogFDR <- -log10(pth_b_nodup$FDR)
+        ggplot(pth_b_nodup,
+               aes(x = mlogFDR, y = reorder(base_id, mlogFDR),
+                   size = n_genes, color = dir_lab)) +
+          geom_point() +
+          scale_color_manual(limits = c("down","up"),  values = cols_dir_b, name = "Dirección (median LFC)") +
+          scale_size_area(max_size = 9, name = "DEGs en ruta") +
+          labs(
+            title    = "Pathways enriquecidos (A vs C)",
+            subtitle = sprintf("FDR < %.2f  •  color = dirección por mediana(log2FC)", alpha_padj),
+            x = expression(-log[10]("FDR")), y = NULL
+          ) +
+          theme_classic(base_size = 12) +
+          theme(
+            plot.title    = element_text(hjust = 0.5, face = "bold"),
+            plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30")
+          )
+        
+        
+        if (is.null(pth_b_nodup) || nrow(pth_b_nodup)==0) {
+          message("[A_vs_C] No hay genes DEG asociados a las rutas significativas.")
+        } else {
+          
+      
+          
+          ## Dotplot  ---------------------------
+          # (enriquecimiento con dirección)
+          # Solo es para ver si se imprime bien el fot plot, por eso está doble
+          path_summary_b$base_id <- sub("^ko", "map", path_summary_b$pathway)  # añade esta columna a tu tabla de rutas
+          pth_b_nodup   <- path_summary_b[!duplicated(path_summary_b$base_id), ]  # una por ruta
+          
+          pathways_keeper <- c("map00052", "map00400", "map00592", "map01110", "map01230")
+          
+          pth_b_filtered <- pth_b_nodup %>%
+            filter(pathway %in% pathways_keeper)
+          
+          pth_b_filtered$mlogFDR <- -log10(pth_b_filtered$FDR)
+          dotp_b <- (ggplot(pth_b_filtered,
+                 aes(x = mlogFDR, y = reorder(base_id, mlogFDR),
+                     size = n_genes, color = dir_lab)) +
+            geom_point() +
+            scale_color_manual(limits = c("down","up"),  values = cols_dir_b, name = "Dirección (median LFC)") +
+            scale_size_area(max_size = 9, name = "DEGs en ruta") +
+            labs(
+              title    = "Pathways enriquecidos (A vs C)",
+              subtitle = sprintf("FDR < %.2f  •  color = dirección por mediana(log2FC)", alpha_padj),
+              x = expression(-log[10]("FDR")), y = NULL
+            ) +
+            theme_classic(base_size = 12) +
+            theme(
+              plot.title    = element_text(hjust = 0.5, face = "bold"),
+              plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30")
+            ))
+        
+          dotp_b
+          ### Heatmaps por pathway -----------------------------
+          # (DEGs de cada ruta, centrados por gen
+          # Anotación de columnas (A y C) con tus colores
+          ann_b <- data.frame(Group = coldata_b$Group, row.names = rownames(coldata_b))
+          ann_b$Group <- factor(as.character(ann_b$Group), levels = c(contr_1b, contr_2b))  # C, A
+          ann_colors_b <- list(Group = pal_grupo[levels(ann_b$Group)])
+          
+          # Paleta continua simétrica alrededor de 0
+          nbreaks_b <- 256
+          # pequeña función para hacer cada heatmap:
+          make_hm_b <- function(p){
+            g <- path2genes_b[[p]]
+            if (length(g) < 2) { message("Ruta con <2 genes DEG: ", p); return(invisible(NULL)) }
+            mat0 <- assay(vst_b)[g, , drop = FALSE]
+            # centrar por gen (patrón, no nivel)
+            mat  <- mat0 - rowMeans(mat0)
+            # límites simétricos para una escala comparable
+            lim  <- max(abs(mat))
+            breaks_b <- seq(-lim, lim, length.out = nbreaks_b)
+            hm_cols_b <- colorRampPalette(c(col_neg_b, "#f7efe6", col_pos_b))(nbreaks_b - 1)
+            # clustering por patrón
+            pheatmap::pheatmap(
+              mat,
+              color = hm_cols_b, breaks = breaks_b,
+              scale = "none", border_color = NA,
+              clustering_distance_rows = "euclidean",
+              clustering_distance_cols = "correlation",
+              clustering_method = "ward.D2",
+              show_rownames = FALSE, show_colnames = TRUE,
+              annotation_col = ann_b, annotation_colors = ann_colors_b,
+              main = paste0("Heatmap (DEGs) — ", p, "  [A vs C]"),
+              fontsize_col = 10, treeheight_row = 30, treeheight_col = 30
+            )
+          }
+          
+          # Si quieres limitar a las Top-N por evidencia:
+          # pth_b_nodup <- pth_b_nodup[order(pth_b_nodup$FDR), ]
+          # sig_to_plot <- head(pth_b_nodup$pathway, 8)
+          sig_to_plot <- pth_b_nodup$pathway
+          
+          invisible(lapply(sig_to_plot, make_hm_b))
+        } 
+      } 
+      
+      dotp_b
+      
+      
+      
+      #  (B vs C, log2FC = B/C) ------------------------------
+      # Requisitos ya creados:
+      # contr_1c == "C" (denominador), contr_2c == "B" (numerador)
+      # res_c (DESeqResults), vst_c (DESeqTransform), coldata_c (niveles C/B)
+      # enriched.FDR_c[["KEGG_Pathway"]], annotation (con columna "KEGG_Pathway")
+      
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      pal_grupo <- if (exists("pal_grupo")) pal_grupo else c(A="#fdac4f", B="#a2593d", Control="#3d6863")
+      cols_dir_c <- c("down"="#aa4d6f", "up"="#a5923d")
+      col_neg_c  <- "#aa4d6f";  col_pos_c <- "#a5923d"
+      
+      keep_paths_c <- NULL
+      drop_paths_c <- character(0)
+      
+      # --- 1) DEGs y FDR por pathway
+      resdf_c     <- as.data.frame(res_c)
+      deg_mask_c  <- !is.na(resdf_c$padj) & resdf_c$padj < alpha_padj
+      deg_genes_c <- rownames(resdf_c)[deg_mask_c]
+      
+      fdr_path_c <- enriched.FDR_c[["KEGG_Pathway"]]
+      stopifnot(!is.null(fdr_path_c))
+      
+      sig_paths_all_c <- names(fdr_path_c)[fdr_path_c < alpha_padj]
+      sig_paths_all_c <- sub("^ko", "map", sig_paths_all_c)
+      sig_paths_all_c <- sig_paths_all_c[!duplicated(sig_paths_all_c)]
+      
+      sig_paths_c <- sig_paths_all_c
+      if (!is.null(keep_paths_c)) sig_paths_c <- intersect(sig_paths_c, keep_paths_c)
+      if (length(drop_paths_c))   sig_paths_c <- setdiff(sig_paths_c, drop_paths_c)
+      
+      if (length(sig_paths_c) == 0) {
+        message("[B_vs_C] No hay pathways enriquecidos (o fueron filtrados).")
+      } else {
+        
+        # --- 2) ruta -> genes DEG
+        path2genes_c <- setNames(vector("list", length(sig_paths_c)), sig_paths_c)
+        for (p in sig_paths_c) {
+          idx <- grep(p, annotation[,"KEGG_Pathway"], fixed = TRUE)
+          g   <- intersect(rownames(annotation)[idx], deg_genes_c)
+          path2genes_c[[p]] <- g
+        }
+        
+        # --- 3) resumen + dirección por mediana(LFC)
+        lfc_c <- resdf_c$log2FoldChange; names(lfc_c) <- rownames(resdf_c)
+        
+        path_summary_c <- do.call(rbind, lapply(names(path2genes_c), function(p){
+          g <- path2genes_c[[p]]
+          if (length(g) == 0) return(NULL)
+          lfc_g <- lfc_c[g]
+          data.frame(
+            pathway    = p,
+            FDR        = unname(fdr_path_c[p]),
+            n_genes    = length(g),
+            n_up       = sum(lfc_g >=  lfc_thr, na.rm=TRUE),
+            n_down     = sum(lfc_g <= -lfc_thr, na.rm=TRUE),
+            median_lfc = stats::median(lfc_g, na.rm=TRUE),
+            dir_lab    = ifelse(stats::median(lfc_g, na.rm=TRUE) > 0, "up", "down"),
+            stringsAsFactors = FALSE
+          )
+        }))
+        rownames(path_summary_c) <- NULL
+        
+        #### Dotplot ----------------------------------------------
+        path_summary_c$base_id <- sub("^ko", "map", path_summary_c$pathway)
+        pth_c <- path_summary_c[!duplicated(path_summary_c$base_id), ]
+        pth_c$mlogFDR <- -log10(pth_c$FDR)
+        
+        dotp_c <- ggplot(pth_c,
+                         aes(x = mlogFDR, y = reorder(base_id, mlogFDR),
+                             size = n_genes, color = dir_lab)) +
+          geom_point() +
+          scale_color_manual(limits = c("down","up"),
+                             values = cols_dir_c,
+                             name = "Dirección (median LFC)") +
+          scale_size_area(max_size = 9, name = "DEGs en ruta") +
+          labs(title = "Pathways enriquecidos (B vs C)",
+               subtitle = sprintf("FDR < %.2f  •  color = dirección por mediana(log2FC)", alpha_padj),
+               x = expression(-log[10]("FDR")), y = NULL) +
+          theme_classic(base_size = 12) +
+          theme(plot.title = element_text(hjust = .5, face = "bold"),
+                plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30"))
+        dotp_c
+        
+        #### Heatmaps por pathway ----------------------------------------
+        ann_c <- data.frame(Group = coldata_c$Group, row.names = rownames(coldata_c))
+        ann_c$Group <- factor(as.character(ann_c$Group), levels = c(contr_1c, contr_2c))  # C, B
+        ann_colors_c <- list(Group = pal_grupo[levels(ann_c$Group)])
+        
+        nbreaks_c <- 256
+        make_hm_c <- function(p){
+          g <- path2genes_c[[p]]
+          if (length(g) < 2) { message("Ruta con <2 genes DEG: ", p); return(invisible(NULL)) }
+          m0 <- assay(vst_c)[g, , drop=FALSE]
+          m  <- m0 - rowMeans(m0)
+          lim <- max(abs(m))
+          brk <- seq(-lim, lim, length.out = nbreaks_c)
+          cols <- colorRampPalette(c(col_neg_c, "#f7efe6", col_pos_c))(nbreaks_c - 1)
+          
+          pheatmap::pheatmap(m, color = cols, breaks = brk,
+                             scale="none", border_color=NA,
+                             clustering_distance_rows="euclidean",
+                             clustering_distance_cols="correlation",
+                             clustering_method="ward.D2",
+                             show_rownames=FALSE, show_colnames=TRUE,
+                             annotation_col=ann_c, annotation_colors=ann_colors_c,
+                             main=paste0("Heatmap (DEGs) — ", p, "  [B vs C]"),
+                             fontsize_col=10, treeheight_row=30, treeheight_col=30)
+        }
+        
+        sig_to_plot_c <- pth_c$pathway
+        invisible(lapply(sig_to_plot_c, make_hm_c))
+      }
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      # PLOTING B/A — Heatmap top-N DEGs + Universos + Anotación -----------------
+      
+      ### Heatmap top-N DEGs ----------------------------
+      
+      ## --- Parámetros del contraste B/A ---
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      topN_a <- 300     # <- cambia aquí cuántos DEGs (más variables) quieres en el heatmap
+      
+      ## --- 0) Objetos base (DEGs por FDR) ---
+      resdf_a <- as.data.frame(res_a)
+      deg_mask_a <- !is.na(resdf_a$padj) & resdf_a$padj < alpha_padj
+      deg_ids_a  <- rownames(resdf_a)[deg_mask_a]
+      cat("[B/A] #DEGs (padj <", alpha_padj, "):", length(deg_ids_a), "\n")
+      
+      ## --- 1) Heatmap global de DEGs más variables (B/A) ---
+      # Qué se grafica: SOLO DEGs del contraste B/A; seleccionamos los top-N por varianza tras VST.
+      vst_mat_a <- SummarizedExperiment::assay(vst_a)     # genes x muestras
+      mat_deg_a <- vst_mat_a[deg_ids_a, , drop = FALSE]   # solo DEGs
+      
+      # si no hay DEGs, salimos temprano
+      if (nrow(mat_deg_a) == 0) {
+        stop("[B/A] No hay DEGs con el umbral actual; ajusta alpha_padj o revisa el contraste.")
+      }
+      
+      # top-N por varianza entre DEGs
+      library(matrixStats)
+      vars_a <- rowVars(mat_deg_a)
+      ord_a  <- order(vars_a, decreasing = TRUE)
+      sel_a  <- head(rownames(mat_deg_a)[ord_a], min(topN_a, length(ord_a)))
+      
+      # centrar por gen (patrón, no nivel)
+      mat_hm_a0 <- mat_deg_a[sel_a, , drop = FALSE]
+      mat_hm_a  <- mat_hm_a0 - rowMeans(mat_hm_a0)
+      
+      # anotación de columnas (A/B)
+      ann_a <- data.frame(Group = coldata_a$Group, row.names = rownames(coldata_a))
+      ann_a$Group <- droplevels(ann_a$Group)
+      
+      # paleta de grupos
+      if (!exists("pal_grupo")) pal_grupo <- c(A="#fdac4f", B="#a2593d", Control="#3d6863")
+      ann_colors_a <- list(Group = pal_grupo[levels(ann_a$Group)])
+      
+      # paleta continua simétrica (centrada en 0)
+      nbreaks_a <- 256
+      lim_a     <- max(abs(mat_hm_a))
+      breaks_a  <- seq(-lim_a, lim_a, length.out = nbreaks_a)
+      col_neg_a <- "#aa4d6f";  col_pos_a <- "#a5923d"
+      hm_cols_a <- colorRampPalette(c(col_neg_a, "#f7efe6", col_pos_a))(nbreaks_a - 1)
+      ticks_a   <- pretty(c(-lim_a, lim_a), n = 5)
+      
+      # plot
+      pheatmap::pheatmap(
+        mat_hm_a,
+        color = hm_cols_a, breaks = breaks_a,
+        scale = "none", border_color = NA,
+        clustering_distance_rows = "euclidean",
+        clustering_distance_cols = "correlation",
+        clustering_method = "ward.D2",
+        show_rownames = FALSE, show_colnames = TRUE,
+        annotation_col = ann_a, annotation_colors = ann_colors_a,
+        legend_breaks = ticks_a, legend_labels = sprintf("%.1f", ticks_a),
+        main = sprintf("B vs A — Heatmap top-%d DEGs (centrado por gen)", length(sel_a)),
+        fontsize_col = 10, treeheight_row = 30, treeheight_col = 30
+      )
+      
+      
+      
+      ## Universos + export (B/A) — sufijo a
+      ## Requiere: res_a, counts_a, dds_a, coldata_a, annotation,
+      ##           contr_1a (A), contr_2a (B)
+      
+      
+      # Umbrales (si no existen, definir)
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      # Data frame base de resultados
+      resdf_a <- as.data.frame(res_a)
+      resdf_a$gene <- rownames(resdf_a)
+      
+      # Máscara de significancia y dirección (respecto a contr_2a = B)
+      sig_mask_a <- !is.na(resdf_a$padj) & (resdf_a$padj < alpha_padj)
+      resdf_a$direction_raw <- ifelse(resdf_a$log2FoldChange >  0, "up", 
+                                      ifelse(resdf_a$log2FoldChange <  0, "down", "no_change"))
+      resdf_a$direction <- ifelse(sig_mask_a & abs(resdf_a$log2FoldChange) >= lfc_thr,
+                                  ifelse(resdf_a$log2FoldChange > 0,  paste0("up in ", contr_2a),
+                                         paste0("down in ", contr_2a)),
+                                  "ns")
+      
+      ### Export DEGs ---------------------------
+      
+      res_sig_a <- subset(resdf_a, sig_mask_a)
+      # Columna binaria up/down (solo para sig); si quieres mantener “ns”, deja direction completo
+      res_sig_a$up_down <- ifelse(res_sig_a$log2FoldChange > 0, "up", "down")
+      
+      out_deg_csv_a <- paste0("DEG_gene_results_", contr_2a, "_vs_", contr_1a, ".csv")
+      write.csv(res_sig_a[, c("gene","baseMean","log2FoldChange","lfcSE","stat","pvalue","padj","up_down")],
+                file = out_deg_csv_a, row.names = FALSE)
+      cat(">> Guardado:", out_deg_csv_a, "\n")
+      
+      
+      ### Universos (B/A) ------------------------------------------------------
+      
+      # Detectados = genes en la matriz del contraste
+      detected_a <- nrow(counts_a)
+      
+      # Testeados = genes con un resultado estadístico
+      tested_ids_a <- rownames(resdf_a)
+      tested_a     <- length(tested_ids_a)
+      
+      # DEGs totales y por sentido (con |log2FC| >= lfc_thr)
+      deg_ids_a     <- resdf_a$gene[sig_mask_a & abs(resdf_a$log2FoldChange) >= lfc_thr]
+      deg_up_ids_a  <- resdf_a$gene[sig_mask_a & resdf_a$log2FoldChange >=  lfc_thr]
+      deg_dn_ids_a  <- resdf_a$gene[sig_mask_a & resdf_a$log2FoldChange <= -lfc_thr]
+      
+      n_deg_a   <- length(deg_ids_a)
+      n_up_a    <- length(deg_up_ids_a)
+      n_down_a  <- length(deg_dn_ids_a)
+      
+      # Anotación KEGG (usamos columna KEGG_Pathway como proxy de “anotado en KEGG”)
+      # (ajusta si prefieres KEGG_Module o considerar cualquiera de las dos)
+      anno_ids_a <- intersect(tested_ids_a, rownames(annotation))
+      kegg_ok_tested <- with(annotation[anno_ids_a, , drop=FALSE],
+                             !is.na(KEGG_Pathway) & KEGG_Pathway != "")
+      n_kegg_tested  <- sum(kegg_ok_tested)
+      
+      # Entre los DEGs (up/down)
+      anno_up_ids_a   <- intersect(deg_up_ids_a, rownames(annotation))
+      anno_down_ids_a <- intersect(deg_dn_ids_a, rownames(annotation))
+      
+      n_kegg_up_a   <- sum(!is.na(annotation[anno_up_ids_a,  "KEGG_Pathway"])   &
+                             annotation[anno_up_ids_a,  "KEGG_Pathway"]   != "")
+      n_kegg_down_a <- sum(!is.na(annotation[anno_down_ids_a,"KEGG_Pathway"])   &
+                             annotation[anno_down_ids_a,"KEGG_Pathway"]   != "")
+      
+      # Armar tabla “universo”
+      universe_a <- data.frame(
+        contrast          = paste0(contr_2a, "_vs_", contr_1a),  # "B_vs_A"
+        detected_genes    = detected_a,
+        tested_genes      = tested_a,
+        DEGs_total        = n_deg_a,
+        DEGs_up           = n_up_a,
+        DEGs_down         = n_down_a,
+        KEGG_annot_tested = n_kegg_tested,
+        KEGG_annot_up     = n_kegg_up_a,
+        KEGG_annot_down   = n_kegg_down_a,
+        alpha_padj        = alpha_padj,
+        lfc_threshold     = lfc_thr,
+        stringsAsFactors  = FALSE
+      )
+      
+      out_universe_csv_a <- paste0("Universe_", contr_2a, "_vs_", contr_1a, ".csv")
+      write.csv(universe_a, file = out_universe_csv_a, row.names = FALSE)
+      cat(">> Guardado:", out_universe_csv_a, "\n")
+      
+      # (Opcional) imprime resumen en consola
+      print(universe_a)
+      
+      
+      
+      
+      # PLOTING A/C — Heatmap top-N DEGs + Universos + Anotación --------------------
+      
+      ## Parámetros
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      topN_b <- 300
+      
+      ## 0) Objetos base
+      resdf_b   <- as.data.frame(res_b)
+      deg_mask_b<- !is.na(resdf_b$padj) & resdf_b$padj < alpha_padj
+      deg_ids_b <- rownames(resdf_b)[deg_mask_b]
+      cat("[A/C] #DEGs (padj <", alpha_padj, "):", length(deg_ids_b), "\n")
+      
+      ### Heatmap top-N (solo DEGs) ------------------------
+      vst_mat_b <- SummarizedExperiment::assay(vst_b)
+      mat_deg_b <- vst_mat_b[deg_ids_b, , drop = FALSE]
+      if (nrow(mat_deg_b) == 0) stop("[A/C] No hay DEGs con el umbral actual.")
+      
+      library(matrixStats)
+      vars_b <- rowVars(mat_deg_b)
+      ord_b  <- order(vars_b, decreasing = TRUE)
+      sel_b  <- head(rownames(mat_deg_b)[ord_b], min(topN_b, length(ord_b)))
+      
+      mat_hm_b0 <- mat_deg_b[sel_b, , drop = FALSE]
+      mat_hm_b  <- mat_hm_b0 - rowMeans(mat_hm_b0)
+      
+      ann_b <- data.frame(Group = coldata_b$Group, row.names = rownames(coldata_b))
+      ann_b$Group <- droplevels(ann_b$Group)
+      
+      if (!exists("pal_grupo")) pal_grupo <- c(A="#fdac4f", B="#a2593d", Control="#3d6863")
+      ann_colors_b <- list(Group = pal_grupo[levels(ann_b$Group)])
+      
+      nbreaks_b <- 256
+      lim_b     <- max(abs(mat_hm_b)) + 1e-8
+      breaks_b  <- seq(-lim_b, lim_b, length.out = nbreaks_b)
+      col_neg_b <- "#aa4d6f";  col_pos_b <- "#a5923d"
+      hm_cols_b <- colorRampPalette(c(col_neg_b, "#f7efe6", col_pos_b))(nbreaks_b - 1)
+      ticks_b   <- pretty(c(-lim_b, lim_b), n = 5)
+      
+      pheatmap::pheatmap(
+        mat_hm_b,
+        color = hm_cols_b, breaks = breaks_b,
+        scale = "none", border_color = NA,
+        clustering_distance_rows = "euclidean",
+        clustering_distance_cols = "correlation",
+        clustering_method = "ward.D2",
+        show_rownames = FALSE, show_colnames = TRUE,
+        annotation_col = ann_b, annotation_colors = ann_colors_b,
+        legend_breaks = ticks_b, legend_labels = sprintf("%.1f", ticks_b),
+        main = sprintf("A vs C — Heatmap top-%d DEGs (centrado por gen)", length(sel_b)),
+        fontsize_col = 10, treeheight_row = 30, treeheight_col = 30
+      )
+      
+      ## Universos + export (A/C) — sufijo b
+      if (!exists("annotation")) annotation <- read.delim("fullAnnotation.tsv.txt", stringsAsFactors = FALSE, row.names = 1)
+      
+      resdf_b$gene <- rownames(resdf_b)
+      sig_mask_b <- !is.na(resdf_b$padj) & (resdf_b$padj < alpha_padj)
+      resdf_b$direction_raw <- ifelse(resdf_b$log2FoldChange > 0, "up",
+                                      ifelse(resdf_b$log2FoldChange < 0, "down", "no_change"))
+      resdf_b$direction <- ifelse(sig_mask_b & abs(resdf_b$log2FoldChange) >= lfc_thr,
+                                  ifelse(resdf_b$log2FoldChange > 0,  paste0("up in ", contr_2b),
+                                         paste0("down in ", contr_2b)),
+                                  "ns")
+      
+      res_sig_b <- subset(resdf_b, sig_mask_b)
+      res_sig_b$up_down <- ifelse(res_sig_b$log2FoldChange > 0, "up", "down")
+      
+      ### Export DEGs ---------------------------
+      out_deg_csv_b <- paste0("DEG_gene_results_", contr_2b, "_vs_", contr_1b, ".csv")
+      write.csv(res_sig_b[, c("gene","baseMean","log2FoldChange","lfcSE","stat","pvalue","padj","up_down")],
+                file = out_deg_csv_b, row.names = FALSE)
+      cat(">> Guardado:", out_deg_csv_b, "\n")
+      
+      detected_b <- nrow(counts_b)
+      tested_ids_b <- rownames(resdf_b)
+      tested_b     <- length(tested_ids_b)
+      
+      deg_ids_b     <- resdf_b$gene[sig_mask_b & abs(resdf_b$log2FoldChange) >= lfc_thr]
+      deg_up_ids_b  <- resdf_b$gene[sig_mask_b & resdf_b$log2FoldChange >=  lfc_thr]
+      deg_dn_ids_b  <- resdf_b$gene[sig_mask_b & resdf_b$log2FoldChange <= -lfc_thr]
+      
+      n_deg_b  <- length(deg_ids_b)
+      n_up_b   <- length(deg_up_ids_b)
+      n_down_b <- length(deg_dn_ids_b)
+      
+      anno_ids_b <- intersect(tested_ids_b, rownames(annotation))
+      kegg_ok_tested_b <- with(annotation[anno_ids_b, , drop=FALSE],
+                               !is.na(KEGG_Pathway) & KEGG_Pathway != "")
+      n_kegg_tested_b  <- sum(kegg_ok_tested_b)
+      
+      anno_up_ids_b   <- intersect(deg_up_ids_b, rownames(annotation))
+      anno_down_ids_b <- intersect(deg_dn_ids_b, rownames(annotation))
+      n_kegg_up_b   <- sum(!is.na(annotation[anno_up_ids_b,  "KEGG_Pathway"]) &
+                             annotation[anno_up_ids_b,  "KEGG_Pathway"] != "")
+      n_kegg_down_b <- sum(!is.na(annotation[anno_down_ids_b,"KEGG_Pathway"]) &
+                             annotation[anno_down_ids_b,"KEGG_Pathway"] != "")
+      
+      ### Universos (C/A) ------------------------
+      universe_b <- data.frame(
+        contrast          = paste0(contr_2b, "_vs_", contr_1b),  # "A_vs_C"
+        detected_genes    = detected_b,
+        tested_genes      = tested_b,
+        DEGs_total        = n_deg_b,
+        DEGs_up           = n_up_b,
+        DEGs_down         = n_down_b,
+        KEGG_annot_tested = n_kegg_tested_b,
+        KEGG_annot_up     = n_kegg_up_b,
+        KEGG_annot_down   = n_kegg_down_b,
+        alpha_padj        = alpha_padj,
+        lfc_threshold     = lfc_thr,
+        stringsAsFactors  = FALSE
+      )
+      
+      out_universe_csv_b <- paste0("Universe_", contr_2b, "_vs_", contr_1b, ".csv")
+      write.csv(universe_b, file = out_universe_csv_b, row.names = FALSE)
+      cat(">> Guardado:", out_universe_csv_b, "\n")
+      print(universe_b)
+      
+      
+      
+      
+      # PLOTING B/C — Heatmap top-N DEGs + Universos + Anotación -----------------------
+      
+      ## Parámetros
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      topN_c <- 300
+      
+      ## 0) Objetos base
+      resdf_c   <- as.data.frame(res_c)
+      deg_mask_c<- !is.na(resdf_c$padj) & resdf_c$padj < alpha_padj
+      deg_ids_c <- rownames(resdf_c)[deg_mask_c]
+      cat("[B/C] #DEGs (padj <", alpha_padj, "):", length(deg_ids_c), "\n")
+      
+      ## 1) Heatmap top-N (solo DEGs)
+      vst_mat_c <- SummarizedExperiment::assay(vst_c)
+      mat_deg_c <- vst_mat_c[deg_ids_c, , drop = FALSE]
+      if (nrow(mat_deg_c) == 0) stop("[B/C] No hay DEGs con el umbral actual.")
+      
+      library(matrixStats)
+      vars_c <- rowVars(mat_deg_c)
+      ord_c  <- order(vars_c, decreasing = TRUE)
+      sel_c  <- head(rownames(mat_deg_c)[ord_c], min(topN_c, length(ord_c)))
+      
+      mat_hm_c0 <- mat_deg_c[sel_c, , drop = FALSE]
+      mat_hm_c  <- mat_hm_c0 - rowMeans(mat_hm_c0)
+      
+      ann_c <- data.frame(Group = coldata_c$Group, row.names = rownames(coldata_c))
+      ann_c$Group <- droplevels(ann_c$Group)
+      
+      if (!exists("pal_grupo")) pal_grupo <- c(A="#fdac4f", B="#a2593d", Control="#3d6863")
+      ann_colors_c <- list(Group = pal_grupo[levels(ann_c$Group)])
+      
+      nbreaks_c <- 256
+      lim_c     <- max(abs(mat_hm_c)) + 1e-8
+      breaks_c  <- seq(-lim_c, lim_c, length.out = nbreaks_c)
+      col_neg_c <- "#aa4d6f";  col_pos_c <- "#a5923d"
+      hm_cols_c <- colorRampPalette(c(col_neg_c, "#f7efe6", col_pos_c))(nbreaks_c - 1)
+      ticks_c   <- pretty(c(-lim_c, lim_c), n = 5)
+      
+      ### Heatmap top-N (solo DEGs) -------------------------------------------
+      pheatmap::pheatmap(
+        mat_hm_c,
+        color = hm_cols_c, breaks = breaks_c,
+        scale = "none", border_color = NA,
+        clustering_distance_rows = "euclidean",
+        clustering_distance_cols = "correlation",
+        clustering_method = "ward.D2",
+        show_rownames = FALSE, show_colnames = TRUE,
+        annotation_col = ann_c, annotation_colors = ann_colors_c,
+        legend_breaks = ticks_c, legend_labels = sprintf("%.1f", ticks_c),
+        main = sprintf("B vs C — Heatmap top-%d DEGs (centrado por gen)", length(sel_c)),
+        fontsize_col = 10, treeheight_row = 30, treeheight_col = 30
+      )
+      
+      ## Universos + export (B/C) — sufijo c
+      if (!exists("annotation")) annotation <- read.delim("fullAnnotation.tsv.txt", stringsAsFactors = FALSE, row.names = 1)
+      
+      resdf_c$gene <- rownames(resdf_c)
+      sig_mask_c <- !is.na(resdf_c$padj) & (resdf_c$padj < alpha_padj)
+      resdf_c$direction_raw <- ifelse(resdf_c$log2FoldChange > 0, "up",
+                                      ifelse(resdf_c$log2FoldChange < 0, "down", "no_change"))
+      resdf_c$direction <- ifelse(sig_mask_c & abs(resdf_c$log2FoldChange) >= lfc_thr,
+                                  ifelse(resdf_c$log2FoldChange > 0,  paste0("up in ", contr_2c),
+                                         paste0("down in ", contr_2c)),
+                                  "ns")
+      ### Export DEGs ------------------------------
+      res_sig_c <- subset(resdf_c, sig_mask_c)
+      res_sig_c$up_down <- ifelse(res_sig_c$log2FoldChange > 0, "up", "down")
+      
+      out_deg_csv_c <- paste0("DEG_gene_results_", contr_2c, "_vs_", contr_1c, ".csv")
+      write.csv(res_sig_c[, c("gene","baseMean","log2FoldChange","lfcSE","stat","pvalue","padj","up_down")],
+                file = out_deg_csv_c, row.names = FALSE)
+      cat(">> Guardado:", out_deg_csv_c, "\n")
+      
+      detected_c <- nrow(counts_c)
+      tested_ids_c <- rownames(resdf_c)
+      tested_c     <- length(tested_ids_c)
+      
+      deg_ids_c     <- resdf_c$gene[sig_mask_c & abs(resdf_c$log2FoldChange) >= lfc_thr]
+      deg_up_ids_c  <- resdf_c$gene[sig_mask_c & resdf_c$log2FoldChange >=  lfc_thr]
+      deg_dn_ids_c  <- resdf_c$gene[sig_mask_c & resdf_c$log2FoldChange <= -lfc_thr]
+      
+      n_deg_c  <- length(deg_ids_c)
+      n_up_c   <- length(deg_up_ids_c)
+      n_down_c <- length(deg_dn_ids_c)
+      
+      anno_ids_c <- intersect(tested_ids_c, rownames(annotation))
+      kegg_ok_tested_c <- with(annotation[anno_ids_c, , drop=FALSE],
+                               !is.na(KEGG_Pathway) & KEGG_Pathway != "")
+      n_kegg_tested_c  <- sum(kegg_ok_tested_c)
+      
+      anno_up_ids_c   <- intersect(deg_up_ids_c, rownames(annotation))
+      anno_down_ids_c <- intersect(deg_dn_ids_c, rownames(annotation))
+      n_kegg_up_c   <- sum(!is.na(annotation[anno_up_ids_c,  "KEGG_Pathway"]) &
+                             annotation[anno_up_ids_c,  "KEGG_Pathway"] != "")
+      n_kegg_down_c <- sum(!is.na(annotation[anno_down_ids_c,"KEGG_Pathway"]) &
+                             annotation[anno_down_ids_c,"KEGG_Pathway"] != "")
+      ### Universos (C/A) ----------------------------------------
+      universe_c <- data.frame(
+        contrast          = paste0(contr_2c, "_vs_", contr_1c),  # "B_vs_C"
+        detected_genes    = detected_c,
+        tested_genes      = tested_c,
+        DEGs_total        = n_deg_c,
+        DEGs_up           = n_up_c,
+        DEGs_down         = n_down_c,
+        KEGG_annot_tested = n_kegg_tested_c,
+        KEGG_annot_up     = n_kegg_up_c,
+        KEGG_annot_down   = n_kegg_down_c,
+        alpha_padj        = alpha_padj,
+        lfc_threshold     = lfc_thr,
+        stringsAsFactors  = FALSE
+      )
+      
+      out_universe_csv_c <- paste0("Universe_", contr_2c, "_vs_", contr_1c, ".csv")
+      write.csv(universe_c, file = out_universe_csv_c, row.names = FALSE)
+      cat(">> Guardado:", out_universe_csv_c, "\n")
+      print(universe_c)
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      # VENN (tres contrastes) – UP y DOWN -----------------------------------
+      
+      
+      # --- Umbrales por si no existen 
+      if (!exists("alpha_padj")) alpha_padj <- 0.05
+      if (!exists("lfc_thr"))    lfc_thr    <- 1
+      
+      # helper: IDs UP/DOWN a partir de un DESeqResults 
+      get_up_down_ids <- function(res, alpha = alpha_padj, lfc = lfc_thr) {
+        df <- as.data.frame(res)
+        df$gene <- rownames(df)
+        df <- df[!is.na(df$padj), , drop = FALSE]
+        up_ids   <- df$gene[df$padj < alpha & df$log2FoldChange >=  lfc]
+        down_ids <- df$gene[df$padj < alpha & df$log2FoldChange <= -lfc]
+        list(up = unique(up_ids), down = unique(down_ids))
+      }
+      
+      # helper: tabla de cuentas por región (A solo, B solo, C solo, etc.)
+      venn_region_counts <- function(sets_named) {
+        stopifnot(length(sets_named) == 3)
+        A <- sets_named[[1]]; B <- sets_named[[2]]; C <- sets_named[[3]]
+        Aonly <- setdiff(A, union(B, C))
+        Bonly <- setdiff(B, union(A, C))
+        Conly <- setdiff(C, union(A, B))
+        AB    <- setdiff(intersect(A, B), C)
+        AC    <- setdiff(intersect(A, C), B)
+        BC    <- setdiff(intersect(B, C), A)
+        ABC   <- Reduce(intersect, list(A, B, C))
+        data.frame(
+          region = c(names(sets_named)[1], names(sets_named)[2], names(sets_named)[3],
+                     paste(names(sets_named)[1:2], collapse = "∩"),
+                     paste(names(sets_named)[c(1,3)], collapse = "∩"),
+                     paste(names(sets_named)[2:3], collapse = "∩"),
+                     "A∩B∩C"),
+          n = c(length(Aonly), length(Bonly), length(Conly),
+                length(AB), length(AC), length(BC), length(ABC)),
+          stringsAsFactors = FALSE
+        )
+      }
+      
+      ### Plot ---------
+      #  plot + guardar (Opción A: outfile requerido) 
+      plot_venn_3 <- function(sets, title, subtitle,
+                              lab_a, lab_b, lab_c,
+                              fill_cols, outfile,
+                              width = 7, height = 5, dpi = 300) {
+        
+        stopifnot(length(sets) == 3)
+        names(sets) <- c(lab_a, lab_b, lab_c)
+        
+        p <- ggvenn(sets,
+                    fill_color = fill_cols,
+                    show_percentage = FALSE, stroke_size = 0.6) +
+          labs(title = title, subtitle = subtitle) +
+          theme_classic(base_size = 12) +
+          theme(
+            plot.title    = element_text(hjust = 0.5, face = "bold"),
+            plot.subtitle = element_text(hjust = 1, size = 9, colour = "grey30")
+          )
+        
+        ggsave(outfile, p, width = width, height = height, dpi = dpi)
+        p
+      }
+      
+      # etiquetas legibles por contraste 
+      lab_a <- paste0(contr_2a, "_vs_", contr_1a)  # B_vs_A
+      lab_b <- paste0(contr_2b, "_vs_", contr_1b)  # A_vs_C
+      lab_c <- paste0(contr_2c, "_vs_", contr_1c)  # B_vs_C
+      
+      #  paleta para los tres juegos (contrastes) 
+      # orden: a, b, c
+      venn_cols <- c("#a2593d", "#fdac4f", "#3d6863")  # B_vs_A, A_vs_C, B_vs_C
+      
+      # obtener sets por contraste 
+      ud_a <- get_up_down_ids(res_a)  # B/A
+      ud_b <- get_up_down_ids(res_b)  # A/C
+      ud_c <- get_up_down_ids(res_c)  # B/C
+      
+      sets_up <- list(ud_a$up,   ud_b$up,   ud_c$up)
+      sets_down <- list(ud_a$down, ud_b$down, ud_c$down)
+      
+      ### exportar tablas de regiones ----------
+      cnt_up   <- venn_region_counts(setNames(sets_up,   c(lab_a, lab_b, lab_c)))
+      cnt_down <- venn_region_counts(setNames(sets_down, c(lab_a, lab_b, lab_c)))
+      write.csv(cnt_up,   file = "Venn_regions_counts_UP.csv",   row.names = FALSE)
+      write.csv(cnt_down, file = "Venn_regions_counts_DOWN.csv", row.names = FALSE)
+      cat(">> Guardados: Venn_regions_counts_UP.csv, Venn_regions_counts_DOWN.csv\n")
+      
+      ### plot printing ----------
+      subtxt <- sprintf("padj < %.2f  •  (log2FC ≥ %g)", alpha_padj, lfc_thr)
+      
+      venn_up_plot <- plot_venn_3(
+        sets      = setNames(sets_up, c(lab_a, lab_b, lab_c)),
+        title     = "Venn — UP (B/A, A/C, B/C)",
+        subtitle  = subtxt,
+        lab_a     = lab_a, lab_b = lab_b, lab_c = lab_c,
+        fill_cols = venn_cols,
+        outfile   = "Venn_UP.png"
+      )
+      print(venn_up_plot)
+      cat(">> Guardado: Venn_UP.png\n")
+      
+      venn_down_plot <- plot_venn_3(
+        sets      = setNames(sets_down, c(lab_a, lab_b, lab_c)),
+        title     = "Venn — DOWN (B/A, A/C, B/C)",
+        subtitle  = subtxt,
+        lab_a     = lab_a, lab_b = lab_b, lab_c = lab_c,
+        fill_cols = venn_cols,
+        outfile   = "Venn_DOWN.png"
+      )
+      print(venn_down_plot)
+      cat(">> Guardado: Venn_DOWN.png\n")
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      # DEGs avec Pfams & log2FC ---------
+      
+      ##  DEG + Anotación (Pfams/Description/GOs/KEGG) por contraste 
+      
+      # 0) Cargar anotación si hace falta
+      if (!exists("annotation")) {
+        annotation <- read.delim("fullAnnotation.tsv.txt",
+                                 stringsAsFactors = FALSE,
+                                 row.names = 1, check.names = FALSE)
+      }
+      
+      # 1) Helper para unir y exportar (mantiene el orden de res_sig_*)
+      annotate_and_export <- function(res_sig, contr_2, contr_1, suffix) {
+        stopifnot(is.data.frame(res_sig), "gene" %in% colnames(res_sig))
+        # columnas útiles si existen en tu anotación
+        ann_cols <- intersect(
+          c("Preferred_name","Description","PFAMs","PFAM","GOs","GO",
+            "KEGG_ko","KEGG_Pathway","KEGG_Module"),
+          colnames(annotation)
+        )
+        idx <- match(res_sig$gene, rownames(annotation))      # alinea por ID de gen
+        ann_part <- annotation[idx, ann_cols, drop = FALSE]   # puede traer NAs si falta
+        out <- cbind(res_sig, ann_part)
+        
+        
+        # crea un objeto con sufijo (a/b/c) en el GlobalEnv y exporta CSV
+        assign(paste0("DEG_annotated_", suffix), out, envir = .GlobalEnv)
+        out_file <- paste0("DEG_annotated_", contr_2, "_vs_", contr_1, ".csv")
+        write.csv(out, out_file, row.names = FALSE)
+        cat(">> Guardado:", out_file, "| rows:", nrow(out), "\n")
+        invisible(out)
+      }
+      
+      
+      # 2) Ejecutar por contraste (requiere res_sig_a/b/c y contr_1*/contr_2* ya definidos)
+      
+      # a) B vs A
+      DEG_annotated_a <- annotate_and_export(res_sig_a, contr_2a, contr_1a, "a")
+      
+      # b) A vs C
+      DEG_annotated_b <- annotate_and_export(res_sig_b, contr_2b, contr_1b, "b")
+      
+      # c) B vs C
+      DEG_annotated_c <- annotate_and_export(res_sig_c, contr_2c, contr_1c, "c")
+      
+      
+      
+      
+      
+      # OTROS COMENTARIOS PARA DOCUMENTOS EN EXCEL -------------------------
+      
+      ### BLUE-RED KEGG COLOR----------------------
+      #=SI(L2>0, "green", "purple")
